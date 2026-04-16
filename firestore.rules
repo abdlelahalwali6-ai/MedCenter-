@@ -1,0 +1,157 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model (Comprehensive)
+    // ===============================================================
+    //
+    // collections: 
+    // users, patients, appointments, medical_records, inventory, 
+    // lab_requests, radiology_requests, prescriptions, bills, 
+    // messages, lab_catalog, radiology_catalog, services_catalog, 
+    // service_requests, audit_logs, settings, metadata
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isBootstrapAdmin() {
+      return isAuthenticated() && 
+             request.auth.token.email == "abdlelahalwali6@gmail.com" &&
+             request.auth.token.email_verified == true;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(role) {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == role;
+    }
+
+    function isAdmin() {
+      return isBootstrapAdmin() || hasRole('admin');
+    }
+
+    function isStaff() {
+      return isAdmin() || 
+             hasRole('doctor') || 
+             hasRole('nurse') || 
+             hasRole('pharmacist') || 
+             hasRole('lab_tech') || 
+             hasRole('receptionist') || 
+             hasRole('radiologist');
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // Rules for collections
+    
+    match /users/{uid} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (isAdmin() || (isOwner(uid) && request.resource.data.role == 'patient'));
+      allow update: if isAuthenticated() && (isAdmin() || isOwner(uid));
+      allow delete: if isAdmin();
+    }
+
+    match /patients/{patientId} {
+      allow read: if isStaff() || isOwner(patientId) || (isAuthenticated() && resource.data.uid == request.auth.uid);
+      allow create, update: if isStaff() || (isAuthenticated() && request.auth.uid == patientId);
+      allow delete: if isAdmin();
+    }
+
+    match /lab_catalog/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /radiology_catalog/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /services_catalog/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /lab_requests/{id} {
+      allow read: if isStaff() || (isAuthenticated() && resource.data.patientId == request.auth.uid);
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /radiology_requests/{id} {
+      allow read: if isStaff() || (isAuthenticated() && resource.data.patientId == request.auth.uid);
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /prescriptions/{id} {
+      allow read: if isStaff() || (isAuthenticated() && resource.data.patientId == request.auth.uid);
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /appointments/{id} {
+      allow read: if isStaff() || (isAuthenticated() && (resource.data.patientId == request.auth.uid || resource.data.doctorId == request.auth.uid));
+      allow create, update: if isStaff() || (isAuthenticated() && request.resource.data.patientId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /medical_records/{id} {
+      allow read: if isStaff() || (isAuthenticated() && resource.data.patientId == request.auth.uid);
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /bills/{id} {
+      allow read: if isStaff() || (isAuthenticated() && resource.data.patientId == request.auth.uid);
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /inventory/{id} {
+      allow read: if isStaff();
+      allow write: if isAdmin() || hasRole('pharmacist');
+    }
+
+    match /messages/{id} {
+      allow read: if isAuthenticated() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (resource.data.receiverId == request.auth.uid || resource.data.senderId == request.auth.uid);
+    }
+
+    match /service_requests/{id} {
+      allow read: if isStaff() || (isAuthenticated() && resource.data.patientId == request.auth.uid);
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /audit_logs/{id} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    match /settings/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /metadata/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

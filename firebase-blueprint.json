@@ -1,0 +1,130 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Staff member or patient profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "doctor", "nurse", "pharmacist", "lab_tech", "radiologist", "receptionist", "patient"] },
+        "photoURL": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "specialization": { "type": "string" },
+        "department": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Patient": {
+      "title": "Patient",
+      "description": "Medical patient record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "mrn": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "dateOfBirth": { "type": "string" },
+        "gender": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "mrn", "phone"]
+    },
+    "LabCatalogItem": {
+      "title": "Lab Catalog Item",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "number" },
+        "items": { "type": "array" }
+      }
+    },
+    "LabRequest": {
+      "title": "Lab Request",
+      "properties": {
+        "id": { "type": "string" },
+        "patientId": { "type": "string" },
+        "status": { "type": "string" },
+        "tests": { "type": "array" }
+      }
+    },
+    "RadiologyRequest": {
+      "title": "Radiology Request",
+      "properties": {
+        "id": { "type": "string" },
+        "patientId": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    },
+    "Prescription": {
+      "title": "Prescription",
+      "properties": {
+        "id": { "type": "string" },
+        "patientId": { "type": "string" },
+        "status": { "type": "string" },
+        "medications": { "type": "array" }
+      }
+    },
+    "Bill": {
+      "title": "Bill",
+      "properties": {
+        "id": { "type": "string" },
+        "patientId": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string" }
+      }
+    },
+    "Appointment": {
+      "title": "Appointment",
+      "properties": {
+        "id": { "type": "string" },
+        "patientId": { "type": "string" },
+        "doctorId": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    },
+    "InventoryItem": {
+      "title": "Inventory Item",
+      "description": "Medical and pharmacy inventory items including drugs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "scientificName": { "type": "string", "description": "Scientific/generic name (e.g., Paracetamol)" },
+        "commercialName": { "type": "string", "description": "Commercial/brand name (e.g., Panadol)" },
+        "category": { "type": "string", "enum": ["medication", "supply", "equipment"] },
+        "quantity": { "type": "number" },
+        "price": { "type": "number", "description": "Unit price in YER" },
+        "unit": { "type": "string", "description": "Box, strip, tablet, etc." },
+        "barcode": { "type": "string", "description": "Barcode for scanning" },
+        "minThreshold": { "type": "number" },
+        "expiryDate": { "type": "string", "format": "date" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "scientificName", "quantity", "price"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": { "schema": "UserProfile", "description": "User profiles" },
+    "/patients/{id}": { "schema": "Patient", "description": "Patient records" },
+    "/appointments/{id}": { "schema": "Appointment", "description": "Scheduled visits" },
+    "/medical_records/{id}": { "schema": "object", "description": "Clinical encounter details" },
+    "/lab_catalog/{id}": { "schema": "LabCatalogItem", "description": "Lab test catalog" },
+    "/lab_requests/{id}": { "schema": "LabRequest", "description": "Lab test requests" },
+    "/radiology_catalog/{id}": { "schema": "object", "description": "Radiology test catalog" },
+    "/radiology_requests/{id}": { "schema": "RadiologyRequest", "description": "Radiology imaging requests" },
+    "/prescriptions/{id}": { "schema": "Prescription", "description": "Medical prescriptions" },
+    "/bills/{id}": { "schema": "Bill", "description": "Medical invoices" },
+    "/inventory/{id}": { "schema": "InventoryItem", "description": "Medical and pharmacy inventory" },
+    "/messages/{id}": { "schema": "object", "description": "Secure messages" },
+    "/services_catalog/{id}": { "schema": "object", "description": "General service catalog" },
+    "/service_requests/{id}": { "schema": "object", "description": "General service requests" },
+    "/audit_logs/{id}": { "schema": "object", "description": "System audit logs" },
+    "/settings/{id}": { "schema": "object", "description": "System settings" },
+    "/metadata/{id}": { "schema": "object", "description": "System metadata and counters" }
+  }
+}

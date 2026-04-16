@@ -1,0 +1,14 @@
+{
+  "name": "Remix: MedCenter HIS",
+  "description": "نظام متكامل لإدارة المراكز الطبية يشمل الاستقبال، العيادات، المختبر، الأشعة، الصيدلية، الموارد البشرية، وإدارة الخدمات والأسعار والنظام المالي المتكامل.",
+  "requestFramePermissions": [
+    "camera",
+    "android"
+  ],
+  "majorCapabilities": [
+    "Mobile Native",
+    "PWA",
+    "OfflineFirst",
+    "Inventory"
+  ]
+}
