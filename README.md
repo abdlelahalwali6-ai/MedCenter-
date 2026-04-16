@@ -1,36 +1,20 @@
-# 🚀 نظام رعاية الطبي - الإصدار الهجين (Hybrid Edition)
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-تم تطوير هذا النظام ليعمل بكفاءة عالية في ظروف الاتصال المتغيرة، من خلال دمج تقنيات قواعد البيانات السحابية والمحلية.
+# Run and deploy your AI Studio app
 
-## 🛠 المعمارية التقنية (Architecture)
+This contains everything you need to run your app locally.
 
-يعتمد النظام على **معمارية هجينة (Hybrid Architecture)** تجمع بين قوتين:
-1.  **Google Firebase (Online):** يعمل كمصدر وحيد للحقيقة (Source of Truth) للمزامنة بين جميع المستخدمين وحفظ البيانات سحابياً.
-2.  **Dexie.js / IndexedDB (Local):** يعمل كقاعدة بيانات داخلية في المتصفح، مما يضمن سرعة استجابة فورية حتى في حالة انقطاع الإنترنت، وسرعة بحث فائقة في السجلات الضخمة.
+View your app in AI Studio: https://ai.studio/apps/e691fa1f-e390-4798-8b16-894c1bfe32af
 
-### مميزات المعمارية:
-*   **Offline-First:** يمكنك تصفح بيانات المرضى والمخزون حتى بدون إنترنت.
-*   **Reactive Sync:** يتم تحديث البيانات المحلية تلقائياً بمجرد حدوث أي تغيير في السحاب.
-*   **Zero Latency:** عمليات البحث والتقارير تتم محلياً بسرعة البرق.
+## Run Locally
 
----
+**Prerequisites:**  Node.js
 
-## 📦 كيفية تصدير المشروع إلى GitHub
 
-نظراً للقيود الأمنية في بيئة التطوير، لا يمكن إجراء عملية الرفع المباشر عبر الأوامر البرمجية، ولكن يمكنك القيام بذلك بسهولة باتباع الخطوات التالية:
-
-1.  افتح قائمة **إعدادات المشروع (Settings)** في الزاوية العلوية للمنصة.
-2.  اختر **Export to GitHub**.
-3.  سيطلب منك النظام تحديد المستودع (Repository) أو إنشاء واحد جديد.
-4.  قم بلصق مفتاح الوصول الخاص بك (Token) عند الحاجة في إعدادات المنصة.
-
-**ملاحظة:** تم إعداد ملف `.gitignore` بشكل احترافي لضمان رفع الكود المصدري فقط دون الملفات المؤقتة أو المكتبات الضخمة.
-
----
-
-## 📋 إرشادات التشغيل
-1.  قم بتثبيت المكتبات: `npm install`
-2.  تشغيل المشروع: `npm run dev`
-3.  بناء نسخة الإنتاج: `npm run build`
-
-تم تطوير هذا النظام باحترافية لضمان أعلى مستويات الدقة والأداء في المراكز الطبية.
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

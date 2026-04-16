@@ -4,10 +4,5 @@
   "requestFramePermissions": [
     "camera"
   ],
-  "majorCapabilities": [
-    "Mobile Native",
-    "PWA",
-    "OfflineFirst",
-    "Inventory"
-  ]
+  "majorCapabilities": []
 }

@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Settings as SettingsIcon, Bell, Shield, Database, Globe, Smartphone, Loader2, DatabaseBackup, Github, GitBranch, Link } from 'lucide-react';
+import { Settings as SettingsIcon, Bell, Shield, Database, Globe, Smartphone, Loader2, DatabaseBackup } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/src/context/AuthContext';
 import { seedLabCatalog } from '@/src/lib/seedLab';
@@ -35,7 +35,7 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showSeedConfirm, setShowSeedConfirm] = useState(false);
-  const [activeTab, setActiveTab] = useState<'general' | 'security' | 'notifications' | 'backup' | 'github'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'security' | 'notifications' | 'backup'>('general');
   
   const [settings, setSettings] = useState({
     centerNameAr: 'مركز رعاية المريض الطبي',
@@ -50,11 +50,7 @@ export default function Settings() {
     emailNotifications: true,
     smsNotifications: false,
     backupFrequency: 'daily',
-    retentionPolicy: '90',
-    githubEnabled: false,
-    githubToken: '',
-    githubRepo: 'owner/repo',
-    autoExportEnabled: false
+    retentionPolicy: '90'
   });
 
   useEffect(() => {
@@ -341,82 +337,6 @@ export default function Settings() {
             </CardContent>
           </Card>
         );
-      case 'github':
-        return (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Github size={20} />
-                تكامل GitHub والتصدير التلقائي
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-border">
-                <div className="flex items-center gap-3">
-                  <Link className="text-primary" />
-                  <div>
-                    <p className="font-bold text-sm">تفعيل ربط GitHub</p>
-                    <p className="text-xs text-muted-foreground">ربط المشروع بمستودع خارجي للتصدير والتحكم بالإصدارات</p>
-                  </div>
-                </div>
-                <div 
-                  className={`w-12 h-6 rounded-full relative cursor-pointer transition-colors ${settings.githubEnabled ? 'bg-primary' : 'bg-muted'}`}
-                  onClick={() => isAdmin && setSettings({...settings, githubEnabled: !settings.githubEnabled})}
-                >
-                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${settings.githubEnabled ? 'right-1' : 'right-7'}`}></div>
-                </div>
-              </div>
-
-              {settings.githubEnabled && (
-                <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                  <div className="space-y-2">
-                    <Label>رمز الدخول الشخصي (Personal Access Token)</Label>
-                    <Input 
-                      type="password"
-                      placeholder="ghp_****************"
-                      value={settings.githubToken} 
-                      onChange={e => setSettings({...settings, githubToken: e.target.value})} 
-                    />
-                    <p className="text-[10px] text-muted-foreground italic">يتم تخزين الرمز بشكل آمن في إعدادات النظام المشفرة.</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>اسم المستودع (Repository)</Label>
-                    <Input 
-                      placeholder="username/repository-name"
-                      value={settings.githubRepo} 
-                      onChange={e => setSettings({...settings, githubRepo: e.target.value})} 
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-border">
-                    <div className="flex items-center gap-3">
-                      <GitBranch className="text-primary" />
-                      <div>
-                        <p className="font-bold text-sm">التصدير التلقائي عند الحفظ</p>
-                        <p className="text-xs text-muted-foreground">تحديث الكود تلقائياً على GitHub عند إجراء تغييرات جوهرية</p>
-                      </div>
-                    </div>
-                    <div 
-                      className={`w-12 h-6 rounded-full relative cursor-pointer transition-colors ${settings.autoExportEnabled ? 'bg-primary' : 'bg-muted'}`}
-                      onClick={() => isAdmin && setSettings({...settings, autoExportEnabled: !settings.autoExportEnabled})}
-                    >
-                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${settings.autoExportEnabled ? 'right-1' : 'right-7'}`}></div>
-                    </div>
-                  </div>
-
-                  <div className="pt-2 flex gap-2">
-                    <Button variant="outline" className="flex-1 gap-2" onClick={() => toast.info('جاري اختبار الاتصال بـ GitHub...')}>
-                      اختبار الاتصال
-                    </Button>
-                    <Button className="flex-1 gap-2" onClick={() => toast.success('تم جدولة عملية التصدير التلقائية')}>
-                      بدء تصدير يدوي
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        );
       default:
         return null;
     }
@@ -479,15 +399,6 @@ export default function Settings() {
             <CardContent className="p-4 flex items-center gap-3">
               <Database size={20} className={activeTab === 'backup' ? 'text-primary' : 'text-secondary'} />
               <span className={activeTab === 'backup' ? 'font-bold' : 'font-medium'}>النسخ الاحتياطي</span>
-            </CardContent>
-          </Card>
-          <Card 
-            className={`cursor-pointer transition-all ${activeTab === 'github' ? 'border-r-4 border-r-primary bg-sky-50/30' : 'hover:bg-muted'}`}
-            onClick={() => setActiveTab('github')}
-          >
-            <CardContent className="p-4 flex items-center gap-3">
-              <Github size={20} className={activeTab === 'github' ? 'text-primary' : 'text-secondary'} />
-              <span className={activeTab === 'github' ? 'font-bold' : 'font-medium'}>تكامل GitHub</span>
             </CardContent>
           </Card>
         </div>
