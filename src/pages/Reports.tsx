@@ -6,8 +6,10 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileBarChart, Download, FileText, PieChart, BarChart3, Users, TrendingUp, AreaChart as AreaChartIcon } from 'lucide-react';
+import { FileBarChart, Download, Users, TrendingUp, BarChart3, PieChart } from 'lucide-react';
 import { useAuth } from '@/src/context/AuthContext';
+import { localDB } from '@/src/lib/db';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { 
   BarChart, 
   Bar, 
@@ -16,8 +18,6 @@ import {
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer, 
-  LineChart, 
-  Line,
   PieChart as RePieChart,
   Pie,
   Cell,
@@ -25,29 +25,34 @@ import {
   Area
 } from 'recharts';
 
-const data = [
-  { name: 'السبت', patients: 45, revenue: 4500 },
-  { name: 'الأحد', patients: 52, revenue: 5200 },
-  { name: 'الاثنين', patients: 38, revenue: 3800 },
-  { name: 'الثلاثاء', patients: 65, revenue: 6500 },
-  { name: 'الأربعاء', patients: 48, revenue: 4800 },
-  { name: 'الخميس', patients: 59, revenue: 5900 },
-  { name: 'الجمعة', patients: 20, revenue: 2000 },
-];
-
-const pieData = [
-  { name: 'عامة', value: 400 },
-  { name: 'أطفال', value: 300 },
-  { name: 'أسنان', value: 300 },
-  { name: 'جلدية', value: 200 },
-];
-
 const COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444'];
 
 export default function Reports() {
   const { profile } = useAuth();
+  
+  const patientsCount = useLiveQuery(() => localDB.patients.count()) || 0;
+  const inventoryCount = useLiveQuery(() => localDB.inventory.count()) || 0;
+  const labRequestsCount = useLiveQuery(() => localDB.labRequests.count()) || 0;
 
   if (profile?.role === 'patient') return null;
+
+  // Mocked trend data based on current counts for visual appeal if database is fresh
+  const data = [
+    { name: 'السبت', patients: Math.floor(patientsCount * 0.1) + 20, revenue: 4500 },
+    { name: 'الأحد', patients: Math.floor(patientsCount * 0.12) + 25, revenue: 5200 },
+    { name: 'الاثنين', patients: Math.floor(patientsCount * 0.08) + 15, revenue: 3800 },
+    { name: 'الثلاثاء', patients: Math.floor(patientsCount * 0.15) + 30, revenue: 6500 },
+    { name: 'الأربعاء', patients: Math.floor(patientsCount * 0.11) + 22, revenue: 4800 },
+    { name: 'الخميس', patients: Math.floor(patientsCount * 0.14) + 28, revenue: 5900 },
+    { name: 'الجمعة', patients: Math.floor(patientsCount * 0.05) + 10, revenue: 2000 },
+  ];
+
+  const pieData = [
+    { name: 'المخزون', value: inventoryCount },
+    { name: 'المرضى', value: patientsCount },
+    { name: 'المختبر', value: labRequestsCount },
+    { name: 'أخرى', value: 10 },
+  ];
 
   const reportTypes = [
     { title: 'تقارير المرضى', icon: Users, description: 'إحصائيات المرضى الجدد والتركيبة السكانية' },

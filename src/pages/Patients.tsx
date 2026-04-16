@@ -17,6 +17,8 @@ import {
   Timestamp
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType, getNextMRN } from '@/src/lib/firebase';
+import { localDB } from '@/src/lib/db';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { logAction } from '@/src/lib/audit';
 import { Patient } from '@/src/types';
 import { 
@@ -77,7 +79,7 @@ export default function Patients() {
 
   if (profile?.role === 'patient') return null;
 
-  const [patients, setPatients] = useState<Patient[]>([]);
+  const patients = useLiveQuery(() => localDB.patients.reverse().toArray(), []) || [];
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -98,22 +100,8 @@ export default function Patients() {
     bloodType: ''
   });
 
-  useEffect(() => {
-    if (!profile || profile.role === 'patient') return;
-
-    const q = query(collection(db, 'patients'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const patientsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Patient[];
-      setPatients(patientsData);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'patients');
-    });
-
-    return () => unsubscribe();
-  }, [profile]);
+  // No longer need immediate useEffect for onSnapshot as useSync handles global replication
+  // and useLiveQuery provides reactive local access
 
   const handleAddPatient = async (e: React.FormEvent) => {
     e.preventDefault();

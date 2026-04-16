@@ -9,6 +9,8 @@ import { collection, query, onSnapshot, orderBy, updateDoc, deleteDoc, doc, serv
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
 import { logAction } from '@/src/lib/audit';
 import { LabRequest, LabTest, Patient, LabCatalogItem } from '@/src/types';
+import { localDB } from '@/src/lib/db';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -59,7 +61,7 @@ export default function Lab() {
 
   if (profile?.role === 'patient') return null;
 
-  const [requests, setRequests] = useState<LabRequest[]>([]);
+  const requests = useLiveQuery(() => localDB.labRequests.reverse().toArray(), []) || [];
   const [patients, setPatients] = useState<Patient[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRequest, setSelectedRequest] = useState<LabRequest | null>(null);
@@ -103,11 +105,7 @@ export default function Lab() {
     };
 
     fetchSettings();
-    const q = query(collection(db, 'lab_requests'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, (snapshot) => {
-      setRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LabRequest[]);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'lab_requests'));
-
+    
     const qPat = query(collection(db, 'patients'), orderBy('name', 'asc'));
     const unsubPat = onSnapshot(qPat, (snapshot) => {
       const patientsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Patient[];
@@ -122,7 +120,7 @@ export default function Lab() {
       }
     });
 
-    return () => { unsub(); unsubPat(); };
+    return () => { unsubPat(); };
   }, [profile, patientIdFromUrl]);
 
   useEffect(() => {

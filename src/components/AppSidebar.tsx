@@ -38,6 +38,7 @@ import {
 import { Link, useLocation } from 'react-router-dom';
 import { auth } from '@/src/lib/firebase';
 import { signOut } from 'firebase/auth';
+import { SyncStatus } from './SyncStatus';
 
 export function AppSidebar() {
   const { profile, isAdmin, isDoctor, isNurse, isPharmacist, isLabTech, isReceptionist } = useAuth();
@@ -253,6 +254,9 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <div className="mt-4 -mx-4 -mb-4">
+          <SyncStatus />
+        </div>
       </SidebarFooter>
     </Sidebar>
   );

@@ -83,9 +83,16 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
       assetsDir: 'assets',
       emptyOutDir: true,
+      chunkSizeWarningLimit: 1000,
       rollupOptions: {
-        input: {
-          main: resolve(__dirname, 'index.html'),
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-firebase': ['firebase/app', 'firebase/firestore', 'firebase/auth'],
+            'vendor-ui': ['lucide-react', 'motion', 'class-variance-authority', 'clsx', 'tailwind-merge', 'sonner'],
+            'vendor-db': ['dexie', 'dexie-react-hooks'],
+            'vendor-charts': ['recharts'],
+          },
         },
       },
     },

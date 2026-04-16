@@ -6,6 +6,8 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, orderBy, updateDoc, deleteDoc, doc, serverTimestamp, where, addDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
+import { localDB } from '@/src/lib/db';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { logAction } from '@/src/lib/audit';
 import { InventoryItem, Prescription } from '@/src/types';
 import { Button } from '@/components/ui/button';
@@ -51,8 +53,8 @@ export default function Pharmacy() {
   const { profile, isAdmin } = useAuth();
 
   if (profile?.role === 'patient') return null;
-
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  
+  const inventory = useLiveQuery(() => localDB.inventory.toArray(), []) || [];
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -79,19 +81,13 @@ export default function Pharmacy() {
   useEffect(() => {
     if (!profile || profile.role === 'patient') return;
 
-    // Inventory
-    const qInv = query(collection(db, 'inventory'), orderBy('name', 'asc'));
-    const unsubInv = onSnapshot(qInv, (snapshot) => {
-      setInventory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as InventoryItem[]);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'inventory'));
-
-    // Prescriptions
+    // Prescriptions (Still using Firestore for live coordination of orders)
     const qPres = query(collection(db, 'prescriptions'), orderBy('createdAt', 'desc'));
     const unsubPres = onSnapshot(qPres, (snapshot) => {
       setPrescriptions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Prescription[]);
     });
 
-    return () => { unsubInv(); unsubPres(); };
+    return () => { unsubPres(); };
   }, [profile]);
 
   const handleAddItem = async (e: React.FormEvent) => {
