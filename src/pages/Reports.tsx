@@ -156,8 +156,8 @@ export default function Reports() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-[300px] w-full min-h-[300px]">
+              <ResponsiveContainer width="99%" height="100%" minHeight={300}>
                 <BarChart data={data}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="name" />
@@ -178,8 +178,8 @@ export default function Reports() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-[300px] w-full min-h-[300px]">
+              <ResponsiveContainer width="99%" height="100%" minHeight={300}>
                 <AreaChart data={data}>
                   <defs>
                     <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
@@ -206,8 +206,8 @@ export default function Reports() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-[300px] w-full min-h-[300px]">
+              <ResponsiveContainer width="99%" height="100%" minHeight={300}>
                 <RePieChart>
                   <Pie
                     data={pieData}

@@ -16,9 +16,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Image as ImageIcon, Search, Monitor, CheckCircle2, AlertCircle, Trash2, Plus, Settings, Edit, ClipboardList } from 'lucide-react';
+import { Image as ImageIcon, Search, Monitor, CheckCircle2, AlertCircle, Trash2, Plus, Settings, Edit, ClipboardList, ScanLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/src/context/AuthContext';
+import { BarcodeScanner } from '@/src/components/BarcodeScanner';
 
 export default function Radiology() {
   const { profile, isAdmin } = useAuth();
@@ -34,6 +35,8 @@ export default function Radiology() {
   const [editingItem, setEditingItem] = useState<any>(null);
   const [newItem, setNewItem] = useState({ name: '', category: 'X-Ray', price: 0 });
   const [newRequest, setNewRequest] = useState({ patientId: '', typeId: '' });
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scannerMode, setScannerMode] = useState<'search' | 'patient'>('search');
 
   useEffect(() => {
     if (!profile || profile.role === 'patient') return;
@@ -174,8 +177,30 @@ export default function Radiology() {
     req.id.includes(searchTerm)
   );
 
+  const handleScan = (barcode: string) => {
+    if (scannerMode === 'search') {
+      setSearchTerm(barcode);
+    } else if (scannerMode === 'patient') {
+      const patient = patients.find(p => p.mrn === barcode || p.id === barcode || p.phone === barcode);
+      if (patient) {
+        setNewRequest(prev => ({ ...prev, patientId: patient.id }));
+        toast.success(`تم اختيار المريض: ${patient.name}`);
+      } else {
+        toast.error('لم يتم العثور على المريض');
+      }
+    }
+    setIsScannerOpen(false);
+  };
+
   return (
     <div className="p-6 space-y-6" dir="rtl">
+      {isScannerOpen && (
+        <BarcodeScanner 
+          onScan={handleScan} 
+          onClose={() => setIsScannerOpen(false)} 
+          title={scannerMode === 'search' ? "مسح باركود الطلب" : "مسح باركود المريض (MRN)"}
+        />
+      )}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <ImageIcon className="text-primary" />
@@ -235,8 +260,8 @@ export default function Radiology() {
           </div>
 
           <div className="panel">
-            <div className="p-4 border-b">
-              <div className="relative max-w-md">
+            <div className="p-4 border-b flex justify-between items-center gap-4">
+              <div className="relative max-w-md flex-1">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
                 <Input 
                   placeholder="البحث عن مريض أو فحص..." 
@@ -245,6 +270,9 @@ export default function Radiology() {
                   onChange={e => setSearchTerm(e.target.value)}
                 />
               </div>
+              <Button variant="outline" size="icon" onClick={() => { setScannerMode('search'); setIsScannerOpen(true); }}>
+                <ScanLine size={18} />
+              </Button>
             </div>
             <Table>
               <TableHeader>
@@ -404,19 +432,24 @@ export default function Radiology() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>المريض</Label>
-              <Select 
-                value={newRequest.patientId} 
-                onValueChange={val => setNewRequest({...newRequest, patientId: val})}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="اختر المريض" />
-                </SelectTrigger>
-                <SelectContent>
-                  {patients.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select 
+                  value={newRequest.patientId} 
+                  onValueChange={val => setNewRequest({...newRequest, patientId: val})}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="اختر المريض" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {patients.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="icon" onClick={() => { setScannerMode('patient'); setIsScannerOpen(true); }}>
+                  <ScanLine size={18} />
+                </Button>
+              </div>
             </div>
 
             <div className="space-y-2">

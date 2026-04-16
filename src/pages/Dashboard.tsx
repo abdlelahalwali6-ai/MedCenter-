@@ -369,8 +369,8 @@ export default function Dashboard() {
               </button>
             </div>
           </div>
-          <div className="flex-1 p-4 h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="flex-1 p-4 min-h-[300px]">
+             <ResponsiveContainer width="99%" height="100%" minHeight={300}>
               {chartView === 'patients' ? (
                 <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
