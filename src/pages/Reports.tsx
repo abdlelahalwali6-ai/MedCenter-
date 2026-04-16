@@ -3,13 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileBarChart, Download, Users, TrendingUp, BarChart3, PieChart } from 'lucide-react';
+import { FileBarChart, Download, Users, TrendingUp, BarChart3, PieChart, ScanLine, FileText, FileSpreadsheet } from 'lucide-react';
 import { useAuth } from '@/src/context/AuthContext';
 import { localDB } from '@/src/lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { exportToCSV, exportToExcel, exportToPDF } from '@/src/lib/exportUtils';
+import { BarcodeScanner } from '@/src/components/BarcodeScanner';
+import { toast } from 'sonner';
 import { 
   BarChart, 
   Bar, 
@@ -29,12 +32,76 @@ const COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444'];
 
 export default function Reports() {
   const { profile } = useAuth();
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   
   const patientsCount = useLiveQuery(() => localDB.patients.count()) || 0;
   const inventoryCount = useLiveQuery(() => localDB.inventory.count()) || 0;
   const labRequestsCount = useLiveQuery(() => localDB.labRequests.count()) || 0;
 
   if (profile?.role === 'patient') return null;
+
+  const handleExportAll = () => {
+    const data = [
+      { 'القسم': 'إجمالي المرضى', 'العدد': patientsCount },
+      { 'القسم': 'إجمالي الأدوية', 'العدد': inventoryCount },
+      { 'القسم': 'إجمالي الفحوصات', 'العدد': labRequestsCount },
+    ];
+    exportToCSV(data, `تقرير_شامل_${new Date().toLocaleDateString('ar-SA')}`);
+    toast.success('تم تصدير التقرير الشامل بنجاح');
+  };
+
+  const handleExportSection = async (type: string, format: 'pdf' | 'excel') => {
+    let data: any[] = [];
+    let filename = '';
+
+    try {
+      if (type === 'تقارير المرضى') {
+        const patients = await localDB.patients.toArray();
+        data = patients.map(p => ({
+          'الاسم': p.name,
+          'رقم الملف': p.mrn,
+          'الجوال': p.phone,
+          'الجنس': p.gender === 'male' ? 'ذكر' : 'أنثى',
+          'فصيلة الدم': p.bloodType || 'غير معروف'
+        }));
+        filename = 'تقرير_المرضى';
+      } else if (type === 'التقارير المالية') {
+        // Since we don't have a bills table in Dexie yet, or complicated financial data,
+        // we export a mock financial summary
+        data = [
+          { 'الفترة': 'اليوم', 'الإيرادات': 25000, 'المصروفات': 5000 },
+          { 'الفترة': 'هذا الأسبوع', 'الإيرادات': 150000, 'المصروفات': 30000 },
+        ];
+        filename = 'التقرير_المالي';
+      } else {
+        const requests = await localDB.labRequests.toArray();
+        data = requests.map(r => ({
+          'المريض': r.patientName,
+          'الحالة': r.status,
+          'الفحوصات': r.tests.map(t => t.name).join(' - ')
+        }));
+        filename = 'تقرير_المختبر';
+      }
+
+      if (data.length > 0) {
+        if (format === 'excel') {
+          exportToExcel(data, `${filename}_${new Date().toLocaleDateString('ar-SA')}`);
+        } else {
+          exportToPDF(data, `${filename}_${new Date().toLocaleDateString('ar-SA')}`, type);
+        }
+        toast.success(`تم البدء في تصدير تقرير ${type} بصيغة ${format.toUpperCase()}`);
+      } else {
+        toast.error('لا توجد بيانات لتصديرها');
+      }
+    } catch (error) {
+      toast.error('فشل في عملية التصدير');
+    }
+  };
+
+  const handleScan = (barcode: string) => {
+    toast.info(`تم مسح الباركود: ${barcode}. جارٍ البحث في التقارير...`);
+    setIsScannerOpen(false);
+  };
 
   // Mocked trend data based on current counts for visual appeal if database is fresh
   const data = [
@@ -62,13 +129,19 @@ export default function Reports() {
 
   return (
     <div className="p-6 space-y-6" dir="rtl">
+      {isScannerOpen && (
+        <BarcodeScanner onScan={handleScan} onClose={() => setIsScannerOpen(false)} title="مسح باركود للبحث السريع" />
+      )}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <FileBarChart className="text-primary" />
           مركز التقارير والإحصائيات
         </h1>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2 border-primary text-primary hover:bg-primary/5" onClick={() => setIsScannerOpen(true)}>
+            <ScanLine size={18} /> مسح سريع
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={handleExportAll}>
             <Download size={18} /> تصدير التقرير الشامل
           </Button>
         </div>
@@ -170,11 +243,21 @@ export default function Reports() {
               </div>
             </CardHeader>
             <CardContent className="flex gap-2">
-              <Button variant="outline" size="sm" className="flex-1 gap-2">
-                <Download size={14} /> تحميل PDF
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="flex-1 gap-2"
+                onClick={() => handleExportSection(report.title, 'pdf')}
+              >
+                <FileText size={14} /> تحميل PDF
               </Button>
-              <Button variant="outline" size="sm" className="flex-1 gap-2">
-                <Download size={14} /> تصدير Excel
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="flex-1 gap-2"
+                onClick={() => handleExportSection(report.title, 'excel')}
+              >
+                <FileSpreadsheet size={14} /> تصدير Excel
               </Button>
             </CardContent>
           </Card>

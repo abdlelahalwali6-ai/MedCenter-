@@ -58,8 +58,10 @@ import {
   Users,
   UserCheck,
   ClipboardList,
-  Droplets
+  Droplets,
+  ScanLine
 } from 'lucide-react';
+import { BarcodeScanner } from '@/src/components/BarcodeScanner';
 import { toast } from 'sonner';
 import { useAuth } from '@/src/context/AuthContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -103,6 +105,8 @@ export default function Patients() {
   // No longer need immediate useEffect for onSnapshot as useSync handles global replication
   // and useLiveQuery provides reactive local access
 
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  
   const handleAddPatient = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -207,8 +211,17 @@ export default function Patients() {
 
   const stats = getStats();
 
+  const handleScan = (barcode: string) => {
+    setSearchTerm(barcode);
+    setIsScannerOpen(false);
+    toast.info(`تم البحث بالباركود: ${barcode}`);
+  };
+
   return (
     <div className="p-6 space-y-8 bg-slate-50/30 min-h-screen" dir="rtl">
+      {isScannerOpen && (
+        <BarcodeScanner onScan={handleScan} onClose={() => setIsScannerOpen(false)} title="مسح بطاقة المريض (MRN)" />
+      )}
       {/* Header section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -316,14 +329,23 @@ export default function Patients() {
 
       {/* Filter / Search Bar */}
       <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4 items-center">
-          <div className="relative flex-1 w-full">
-             <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-             <Input 
-                 placeholder="البحث بالاسم أو الرقم الطبي أو الجوال..."
-                 className="pr-10 h-11 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white"
-                 value={searchTerm}
-                 onChange={e => setSearchTerm(e.target.value)}
-             />
+          <div className="relative flex-1 w-full flex gap-2">
+             <div className="relative flex-1">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <Input 
+                  placeholder="البحث بالاسم أو الرقم الطبي أو الجوال..."
+                  className="pr-10 h-11 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+              />
+             </div>
+             <Button 
+               variant="outline" 
+               className="h-11 w-11 p-0 rounded-xl border-slate-200 flex items-center justify-center text-slate-400 hover:text-primary hover:border-primary/30"
+               onClick={() => setIsScannerOpen(true)}
+             >
+               <ScanLine size={18} />
+             </Button>
           </div>
          <div className="flex gap-2 w-full md:w-auto">
             <Select value={filterGender} onValueChange={setFilterGender}>
