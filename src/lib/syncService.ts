@@ -24,7 +24,7 @@ export async function processSyncOutbox() {
         case 'create':
           await setDoc(docRef, {
             ...change.data,
-            createdAt: serverTimestamp(),
+            createdAt: change.data.createdAt || serverTimestamp(),
             updatedAt: serverTimestamp()
           });
           break;

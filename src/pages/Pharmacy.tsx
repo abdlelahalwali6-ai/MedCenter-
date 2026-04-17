@@ -11,6 +11,8 @@ import { localDB } from '@/src/lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { logAction } from '@/src/lib/audit';
 import { InventoryItem, Prescription } from '@/src/types';
+import { addToOutbox } from '@/src/lib/syncService';
+import { v4 as uuidv4 } from 'uuid';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -98,19 +100,27 @@ export default function Pharmacy() {
       return;
     }
     try {
-      const docRef = await addDoc(collection(db, 'inventory'), {
+      const itemId = uuidv4();
+      const itemData = {
         ...newItem,
+        id: itemId,
         quantity: Number(newItem.quantity) || 0,
         price: Number(newItem.price) || 0,
         minThreshold: Number(newItem.minThreshold) || 10,
-        updatedAt: serverTimestamp()
-      });
+        updatedAt: new Date().toISOString()
+      };
+
+      // 1. Save locally
+      await localDB.inventory.add(itemData as InventoryItem);
+
+      // 2. Add to outbox
+      await addToOutbox('create', 'inventory', itemId, itemData);
 
       await logAction(
         profile,
         'إضافة صنف للمخزون',
         'inventory',
-        docRef.id,
+        itemId,
         `تم إضافة ${newItem.name} (${newItem.scientificName}) للمخزون`
       );
 
@@ -118,6 +128,7 @@ export default function Pharmacy() {
       setIsAddDialogOpen(false);
       setNewItem({ name: '', scientificName: '', commercialName: '', category: 'medication', quantity: 0, price: 0, unit: 'علبة', barcode: '', minThreshold: 10 });
     } catch (error) {
+      console.error('Error adding item:', error);
       toast.error('فشل إضافة الصنف');
     }
   };
