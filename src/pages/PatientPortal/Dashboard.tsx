@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, where, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
+import { formatArabicDate } from '@/src/lib/dateUtils';
 import { useAuth } from '@/src/context/AuthContext';
 import { 
   Card, 
@@ -82,74 +83,84 @@ export default function PatientDashboard() {
   }, [user]);
 
   return (
-    <div className="flex flex-col gap-6" dir="rtl">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">لوحة تحكم المريض</h1>
-        <p className="text-muted-foreground">مرحباً بك في بوابتك الصحية الشخصية.</p>
+    <div className="flex flex-col gap-8 max-w-6xl mx-auto" dir="rtl">
+      <div className="flex flex-col gap-3 relative overflow-hidden p-8 rounded-3xl bg-gradient-to-br from-primary/10 via-sky-50 to-white border border-primary/10 shadow-sm">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -mr-32 -mt-32 blur-3xl animate-pulse" />
+        <h1 className="text-3xl font-black text-slate-900 tracking-tight relative">لوحة تحكم المريض</h1>
+        <p className="text-slate-600 font-medium relative flex items-center gap-2">
+          <Activity size={16} className="text-primary" />
+          مرحباً بك في بوابتك الصحية الشخصية المتكاملة.
+        </p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {/* Next Appointment Card */}
-        <Card className="border-t-4 border-t-primary">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">الموعد القادم</CardTitle>
-            <Calendar className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            {nextAppointment ? (
-              <div className="space-y-3">
-                <div className="text-2xl font-bold">{nextAppointment.doctorName}</div>
-                <div className="flex items-center text-sm text-muted-foreground gap-2">
-                  <Clock size={14} />
-                  {nextAppointment.date?.toDate().toLocaleDateString('ar-SA')} - {nextAppointment.startTime}
-                </div>
-                <Button render={<Link to="/patient/appointments" />} variant="outline" size="sm" className="w-full mt-2">
-                  عرض التفاصيل
-                </Button>
+        <div className="stat-card group border-t-4 border-t-primary">
+          <div className="flex justify-between items-center mb-4">
+            <span className="stat-label">الموعد القادم</span>
+            <div className="p-2 bg-primary/10 text-primary rounded-lg">
+              <Calendar size={18} strokeWidth={2.5} />
+            </div>
+          </div>
+          {nextAppointment ? (
+            <div className="space-y-4">
+              <div className="stat-value text-xl">{nextAppointment.doctorName}</div>
+              <div className="flex items-center text-sm text-slate-500 font-medium gap-2 bg-slate-50 p-2 rounded-lg">
+                <Clock size={16} className="text-primary" />
+                {formatArabicDate(nextAppointment.date)} - {nextAppointment.startTime}
               </div>
-            ) : (
-              <div className="py-4 text-center text-muted-foreground">
-                <p className="text-sm">لا توجد مواعيد قادمة</p>
-                <Button render={<Link to="/patient/appointments" />} variant="link" size="sm">
-                  حجز موعد جديد
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              <Button render={<Link to="/patient/appointments" />} size="sm" className="w-full h-11 rounded-xl font-bold shadow-md shadow-primary/20">
+                إدارة المواعيد
+              </Button>
+            </div>
+          ) : (
+            <div className="py-6 text-center">
+              <p className="text-sm font-bold text-slate-400 mb-4">لا توجد مواعيد قادمة</p>
+              <Button render={<Link to="/patient/appointments" />} variant="outline" size="sm" className="w-full h-11 rounded-xl border-dashed border-2 hover:bg-primary/5 hover:border-primary transition-all">
+                حجز موعد الآن
+              </Button>
+            </div>
+          )}
+        </div>
 
         {/* Messages Card */}
-        <Card className="border-t-4 border-t-success">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">الرسائل</CardTitle>
-            <MessageSquare className="h-4 w-4 text-success" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{unreadMessages} رسائل جديدة</div>
-            <p className="text-xs text-muted-foreground mt-1">تواصل مع فريقك الطبي بأمان.</p>
-            <Button render={<Link to="/patient/messages" />} variant="outline" size="sm" className="w-full mt-4">
-              فتح البريد الوارد
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="stat-card group border-t-4 border-t-emerald-500">
+          <div className="flex justify-between items-center mb-4">
+            <span className="stat-label">الرسائل</span>
+            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+              <MessageSquare size={18} strokeWidth={2.5} />
+            </div>
+          </div>
+          <div className="stat-value">{unreadMessages} <span className="text-sm font-bold text-slate-400">رسائل جديدة</span></div>
+          <p className="text-xs text-slate-500 font-medium mt-1">تواصل مع فريقك الطبي بأمان وسرية تامة.</p>
+          <Button render={<Link to="/patient/messages" />} variant="outline" size="sm" className="w-full h-11 rounded-xl mt-4 font-bold active:scale-95 transition-all">
+            فتح صندوق الوارد
+          </Button>
+        </div>
 
-        {/* Quick Actions */}
-        <Card className="border-t-4 border-t-warning">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">إجراءات سريعة</CardTitle>
-            <Activity className="h-4 w-4 text-warning" />
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-2">
-            <Button render={<Link to="/patient/records" />} variant="ghost" size="sm" className="justify-start gap-2 h-auto py-2">
-              <FileText size={14} />
-              <span>تقاريري</span>
+        {/* Quick Actions Card */}
+        <div className="stat-card group border-t-4 border-t-amber-500">
+          <div className="flex justify-between items-center mb-4">
+            <span className="stat-label">إجراءات سريعة</span>
+            <div className="p-2 bg-amber-50 text-amber-600 rounded-lg">
+              <Activity size={18} strokeWidth={2.5} />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-2 mt-2">
+            <Button render={<Link to="/patient/records" />} variant="ghost" className="justify-start gap-4 h-12 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all font-bold">
+              <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                <FileText size={16} />
+              </div>
+              <span>تقاريري الطبية</span>
             </Button>
-            <Button render={<Link to="/patient/profile" />} variant="ghost" size="sm" className="justify-start gap-2 h-auto py-2">
-              <Users size={14} />
-              <span>الملف الشخصي</span>
+            <Button render={<Link to="/patient/profile" />} variant="ghost" className="justify-start gap-4 h-12 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all font-bold">
+              <div className="w-8 h-8 rounded-lg bg-pink-50 text-pink-600 flex items-center justify-center">
+                <Users size={16} />
+              </div>
+              <span>تعديل الملف الشخصي</span>
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -166,7 +177,7 @@ export default function PatientDashboard() {
                   <div key={record.id} className="flex items-center justify-between p-3 rounded-lg border bg-slate-50/50">
                     <div className="flex flex-col">
                       <span className="font-semibold">{record.diagnosis}</span>
-                      <span className="text-xs text-muted-foreground">{record.date?.toDate().toLocaleDateString('ar-SA')}</span>
+                      <span className="text-xs text-muted-foreground">{formatArabicDate(record.date)}</span>
                     </div>
                     <Button render={<Link to="/patient/records" />} variant="ghost" size="icon">
                       <ArrowRight size={18} className="rotate-180" />

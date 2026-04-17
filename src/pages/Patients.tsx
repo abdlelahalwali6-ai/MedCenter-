@@ -17,6 +17,7 @@ import {
   Timestamp
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType, getNextMRN } from '@/src/lib/firebase';
+import { formatArabicDate, toDate } from '@/src/lib/dateUtils';
 import { localDB } from '@/src/lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { logAction } from '@/src/lib/audit';
@@ -197,7 +198,8 @@ export default function Patients() {
   const getStats = () => {
     const today = new Date().toISOString().split('T')[0];
     const newToday = patients.filter(p => {
-      const d = p.createdAt instanceof Timestamp ? p.createdAt.toDate().toISOString().split('T')[0] : '';
+      if (!p.createdAt) return false;
+      const d = toDate(p.createdAt).toISOString().split('T')[0];
       return d === today;
     });
 

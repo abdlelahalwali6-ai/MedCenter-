@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, where, orderBy } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
+import { formatArabicDate } from '@/src/lib/dateUtils';
 import { useAuth } from '@/src/context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -68,7 +69,7 @@ export default function PatientRecords() {
                 <div className="flex justify-between items-start">
                   <div>
                     <CardTitle className="text-lg">{record.diagnosis}</CardTitle>
-                    <CardDescription>{record.date?.toDate().toLocaleDateString('ar-SA')}</CardDescription>
+                    <CardDescription>{formatArabicDate(record.date)}</CardDescription>
                   </div>
                   <Button variant="ghost" size="sm" className="gap-2">
                     <Download size={14} /> تحميل التقرير
@@ -98,7 +99,7 @@ export default function PatientRecords() {
                 <div className="flex justify-between items-start">
                   <div>
                     <CardTitle className="text-lg">طلب مختبر #{lab.id.substring(0, 6)}</CardTitle>
-                    <CardDescription>{lab.createdAt?.toDate().toLocaleDateString('ar-SA')}</CardDescription>
+                    <CardDescription>{formatArabicDate(lab.createdAt)}</CardDescription>
                   </div>
                   <Badge variant={lab.status === 'completed' ? 'success' : 'outline'}>
                     {lab.status === 'completed' ? 'مكتمل' : 'قيد الانتظار'}
@@ -126,7 +127,7 @@ export default function PatientRecords() {
                 <div className="flex justify-between items-start">
                   <div>
                     <CardTitle className="text-lg">{rad.type}</CardTitle>
-                    <CardDescription>{rad.createdAt?.toDate().toLocaleDateString('ar-SA')}</CardDescription>
+                    <CardDescription>{formatArabicDate(rad.createdAt)}</CardDescription>
                   </div>
                   <Badge variant={rad.status === 'completed' ? 'success' : 'outline'}>
                     {rad.status === 'completed' ? 'مكتمل' : 'قيد الانتظار'}
@@ -152,7 +153,7 @@ export default function PatientRecords() {
                 <div className="flex justify-between items-start">
                   <div>
                     <CardTitle className="text-lg">وصفة طبية</CardTitle>
-                    <CardDescription>{pre.createdAt?.toDate().toLocaleDateString('ar-SA')}</CardDescription>
+                    <CardDescription>{formatArabicDate(pre.createdAt)}</CardDescription>
                   </div>
                   <Badge variant={pre.status === 'dispensed' ? 'success' : 'outline'}>
                     {pre.status === 'dispensed' ? 'تم الصرف' : 'بانتظار الصرف'}

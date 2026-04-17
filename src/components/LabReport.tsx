@@ -1,5 +1,6 @@
 import React from 'react';
 import { LabRequest, LabTest } from '@/src/types';
+import { formatArabicDate } from '@/src/lib/dateUtils';
 import { FlaskConical, User, Calendar, ShieldCheck, MapPin, Phone } from 'lucide-react';
 
 interface LabReportProps {
@@ -66,7 +67,7 @@ export const LabReport: React.FC<LabReportProps> = ({
           <div className="flex items-center gap-2 text-sm">
             <Calendar size={16} className="text-primary" />
             <span className="font-bold text-slate-700">تاريخ الطلب:</span>
-            <span className="text-slate-900">{request.createdAt?.toDate().toLocaleDateString('ar-SA')}</span>
+            <span className="text-slate-900">{formatArabicDate(request.createdAt)}</span>
           </div>
         </div>
         <div className="space-y-2">

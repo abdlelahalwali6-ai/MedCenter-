@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
+import { formatArabicDateTime } from '@/src/lib/dateUtils';
 import { AuditLog } from '@/src/types';
 import { 
   Table, 
@@ -92,7 +93,7 @@ export default function AuditLogs() {
           </CardHeader>
           <CardContent>
             <p className="text-sm font-bold">
-              {logs[0]?.createdAt?.toDate().toLocaleString('ar-SA') || 'لا يوجد'}
+              {formatArabicDateTime(logs[0]?.createdAt) || 'لا يوجد'}
             </p>
           </CardContent>
         </Card>
@@ -142,7 +143,7 @@ export default function AuditLogs() {
             {filteredLogs.map((log) => (
               <TableRow key={log.id}>
                 <TableCell className="text-xs font-mono">
-                  {log.createdAt?.toDate().toLocaleString('ar-SA')}
+                  {formatArabicDateTime(log.createdAt)}
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col">

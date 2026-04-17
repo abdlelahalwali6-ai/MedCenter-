@@ -18,6 +18,7 @@ import {
   where
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
+import { formatArabicDate, toDate } from '@/src/lib/dateUtils';
 import { Appointment, Patient, UserProfile } from '@/src/types';
 import { Button } from '@/components/ui/button';
 import { 
@@ -75,6 +76,8 @@ export default function Appointments() {
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeStatusTab, setActiveStatusTab] = useState('all');
+  const [filterDate, setFilterDate] = useState('');
+  const [filterDoctorId, setFilterDoctorId] = useState('all');
   
   const [newAppointment, setNewAppointment] = useState({
     patientId: '',
@@ -169,7 +172,8 @@ export default function Appointments() {
   const getStats = () => {
     const today = new Date().toISOString().split('T')[0];
     const todayApps = appointments.filter(a => {
-      const d = a.date instanceof Timestamp ? a.date.toDate().toISOString().split('T')[0] : '';
+      if (!a.date) return false;
+      const d = toDate(a.date).toISOString().split('T')[0];
       return d === today;
     });
 
@@ -208,7 +212,24 @@ export default function Appointments() {
     const matchesSearch = app.patientName.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           app.doctorName.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = activeStatusTab === 'all' || app.status === activeStatusTab;
-    return matchesSearch && matchesStatus;
+    
+    // Date filter
+    let matchesDate = true;
+    if (filterDate) {
+      const appDate = toDate(app.date).toISOString().split('T')[0];
+      matchesDate = appDate === filterDate;
+    }
+
+    // Doctor filter
+    const matchesDoctor = filterDoctorId === 'all' || app.doctorId === filterDoctorId;
+
+    return matchesSearch && matchesStatus && matchesDate && matchesDoctor;
+  }).sort((a, b) => {
+    // Sort by date and then by start time
+    const dateA = toDate(a.date).getTime();
+    const dateB = toDate(b.date).getTime();
+    if (dateA !== dateB) return dateA - dateB;
+    return a.startTime.localeCompare(b.startTime);
   });
 
   return (
@@ -353,25 +374,67 @@ export default function Appointments() {
 
       {/* Main filter and list section */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-slate-50 flex flex-col md:flex-row justify-between items-center gap-4">
-          <Tabs value={activeStatusTab} onValueChange={setActiveStatusTab} className="w-full md:w-auto">
-            <TabsList className="bg-slate-100/50 p-1 rounded-xl h-auto">
-              <TabsTrigger value="all" className="rounded-lg py-2 px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm">الكل</TabsTrigger>
-              <TabsTrigger value="scheduled" className="rounded-lg py-2 px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm">المجدولة</TabsTrigger>
-              <TabsTrigger value="checked-in" className="rounded-lg py-2 px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm">وصل المريض</TabsTrigger>
-              <TabsTrigger value="in-progress" className="rounded-lg py-2 px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm">قيد الكشف</TabsTrigger>
-              <TabsTrigger value="completed" className="rounded-lg py-2 px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm">المكتملة</TabsTrigger>
-            </TabsList>
-          </Tabs>
+        <div className="p-6 border-b border-slate-50 space-y-4">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+            <Tabs value={activeStatusTab} onValueChange={setActiveStatusTab} className="w-full lg:w-auto">
+              <TabsList className="bg-slate-100/50 p-1 rounded-xl h-auto flex-wrap">
+                <TabsTrigger value="all" className="rounded-lg py-2 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm">الكل</TabsTrigger>
+                <TabsTrigger value="scheduled" className="rounded-lg py-2 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm">المجدولة</TabsTrigger>
+                <TabsTrigger value="checked-in" className="rounded-lg py-2 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm">وصل المريض</TabsTrigger>
+                <TabsTrigger value="in-progress" className="rounded-lg py-2 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm">قيد الكشف</TabsTrigger>
+                <TabsTrigger value="completed" className="rounded-lg py-2 px-3 data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm">المكتملة</TabsTrigger>
+              </TabsList>
+            </Tabs>
 
-          <div className="relative w-full md:w-72">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <Input 
-              placeholder="البحث عن موعد، مريض..." 
-              className="pr-10 h-11 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white transition-all"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
+            <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+              <div className="relative flex-1 lg:w-64 min-w-[200px]">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <Input 
+                  placeholder="البحث عن مريض..." 
+                  className="pr-10 h-10 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white transition-all text-sm"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className={`h-10 w-10 rounded-xl transition-colors ${(filterDate || filterDoctorId !== 'all') ? 'bg-primary/10 border-primary text-primary' : 'bg-slate-50/50 border-slate-200'}`}
+                onClick={() => {
+                  setFilterDate('');
+                  setFilterDoctorId('all');
+                }}
+                title="إعادة تعيين الفلاتر"
+              >
+                <Filter size={18} />
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-4 pt-2">
+            <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-100">
+              <CalendarIcon size={16} className="text-slate-400" />
+              <Input 
+                type="date" 
+                value={filterDate} 
+                onChange={e => setFilterDate(e.target.value)}
+                className="h-8 border-none bg-transparent focus-visible:ring-0 p-0 text-sm w-32"
+              />
+            </div>
+            
+            <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-100">
+              <Users size={16} className="text-slate-400" />
+              <select 
+                className="bg-transparent border-none text-sm outline-none cursor-pointer min-w-[120px]"
+                value={filterDoctorId}
+                onChange={e => setFilterDoctorId(e.target.value)}
+              >
+                <option value="all">كل الأطباء</option>
+                {doctors.map(d => (
+                  <option key={d.uid} value={d.uid}>{d.displayName}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -420,7 +483,7 @@ export default function Appointments() {
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2 text-sm text-slate-700 font-semibold">
                           <CalendarIcon size={14} className="text-primary" />
-                          {app.date instanceof Timestamp ? app.date.toDate().toLocaleDateString('ar-SA', { day: '2-digit', month: 'long' }) : ''}
+                          {formatArabicDate(app.date, { day: '2-digit', month: 'long' })}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-slate-500">
                           <Clock size={14} />
@@ -545,7 +608,7 @@ export default function Appointments() {
                   <Input 
                     type="date" 
                     className="h-11 rounded-lg"
-                    value={selectedAppointment.date instanceof Timestamp ? selectedAppointment.date.toDate().toISOString().split('T')[0] : selectedAppointment.date} 
+                    value={selectedAppointment.date ? toDate(selectedAppointment.date).toISOString().split('T')[0] : ''} 
                     onChange={e => setSelectedAppointment({...selectedAppointment, date: new Date(e.target.value)})} 
                     required 
                   />

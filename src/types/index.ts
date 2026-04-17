@@ -171,12 +171,17 @@ export interface BillItem {
   description: string;
   amount: number;
   quantity: number;
+  serviceId?: string;
+  costCenter?: string;
 }
 
 export interface Bill {
   id: string;
   patientId: string;
   patientName: string;
+  doctorId?: string;
+  doctorName?: string;
+  costCenter?: string;
   date: any;
   items: BillItem[];
   description?: string;
@@ -199,6 +204,7 @@ export interface LabCatalogItem {
   name: string;
   category: string;
   price: number;
+  costCenter?: string;
   items: {
     name: string;
     unit: string;
@@ -224,6 +230,7 @@ export interface ServiceCatalogItem {
   name: string;
   category: string;
   price: number;
+  costCenter?: string;
   description?: string;
   createdAt: any;
   updatedAt: any;
@@ -238,6 +245,7 @@ export interface ServiceRequest {
   serviceId: string;
   serviceName: string;
   price: number;
+  costCenter?: string;
   status: 'pending' | 'completed' | 'cancelled';
   billed?: boolean;
   notes?: string;

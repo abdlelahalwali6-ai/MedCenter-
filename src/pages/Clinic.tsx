@@ -16,6 +16,7 @@ import {
   Timestamp
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
+import { formatArabicDate } from '@/src/lib/dateUtils';
 import { logAction } from '@/src/lib/audit';
 import { Patient, MedicalRecord, Appointment, LabTest, LabRequest, RadiologyRequest, Prescription, LabCatalogItem, ServiceCatalogItem } from '@/src/types';
 import { Button } from '@/components/ui/button';
@@ -25,7 +26,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, FileText, Plus, History, ClipboardList, Pill, FlaskConical, Stethoscope } from 'lucide-react';
+import { Search, FileText, Plus, History, ClipboardList, Pill, FlaskConical, Stethoscope, Thermometer, Activity, Weight, Printer, Heart, Trash2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/src/context/AuthContext';
 
@@ -38,6 +39,7 @@ export default function Clinic() {
 
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [records, setRecords] = useState<MedicalRecord[]>([]);
   const [activeTab, setActiveTab] = useState('new-visit');
@@ -49,7 +51,9 @@ export default function Clinic() {
     vitals: {
       temperature: '',
       bloodPressure: '',
-      weight: ''
+      weight: '',
+      pulse: '',
+      spO2: ''
     }
   });
 
@@ -73,7 +77,23 @@ export default function Clinic() {
         if (patient) setSelectedPatient(patient);
       }
     });
-    return () => unsub();
+
+    // Fetch today's appointments for "checked-in" status
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    const qApp = query(
+      collection(db, 'appointments'), 
+      where('date', '>=', Timestamp.fromDate(startOfDay)),
+      where('date', '<=', Timestamp.fromDate(endOfDay))
+    );
+    const unsubApp = onSnapshot(qApp, (snap) => {
+      setAppointments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Appointment[]);
+    });
+
+    return () => { unsub(); unsubApp(); };
   }, [patientIdFromUrl]);
 
   useEffect(() => {
@@ -263,31 +283,57 @@ export default function Clinic() {
 
   return (
     <div className="p-6 grid grid-cols-1 lg:grid-cols-4 gap-6" dir="rtl">
-      {/* Sidebar and Header same as before... */}
-      <Card className="lg:col-span-1 h-[calc(100vh-180px)] flex flex-col">
-        <CardHeader className="p-4 border-b">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Search size={18} />
-            البحث عن مريض
+      {/* Sidebar and Header */}
+      <Card className="lg:col-span-1 h-[calc(100vh-120px)] flex flex-col border-none shadow-xl bg-slate-50/50">
+        <CardHeader className="p-5 border-b bg-white rounded-t-xl">
+          <CardTitle className="text-xl font-black flex items-center gap-2 text-slate-800">
+            <Search size={22} className="text-primary" />
+            انتظار العيادة
           </CardTitle>
-          <Input 
-            placeholder="الاسم أو الرقم الطبي أو الجوال..." 
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="mt-2"
-          />
+          <div className="relative mt-3">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <Input 
+              placeholder="ابحث عن مريض..." 
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="pr-10 bg-slate-50 border-none h-11 rounded-xl focus-visible:ring-primary/20"
+            />
+          </div>
         </CardHeader>
-        <CardContent className="p-0 overflow-auto flex-1">
-          {filteredPatients.map(patient => (
-            <button
-              key={patient.id}
-              onClick={() => setSelectedPatient(patient)}
-              className={`w-full text-right p-4 border-b hover:bg-muted transition-colors ${selectedPatient?.id === patient.id ? 'bg-sky-50 border-r-4 border-primary' : ''}`}
-            >
-              <p className="font-bold text-sm">{patient.name}</p>
-              <p className="text-xs text-muted-foreground">{patient.mrn}</p>
-            </button>
-          ))}
+        <CardContent className="p-2 overflow-auto flex-1 no-scrollbar">
+          <div className="space-y-2">
+            {filteredPatients.map(patient => {
+              const app = appointments.find(a => a.patientId === patient.id && a.status === 'checked-in');
+              return (
+                <button
+                  key={patient.id}
+                  onClick={() => setSelectedPatient(patient)}
+                  className={`
+                    w-full text-right p-4 rounded-xl transition-all duration-300 border flex flex-col gap-1 relative overflow-hidden group
+                    ${selectedPatient?.id === patient.id 
+                      ? 'bg-white border-primary shadow-lg shadow-primary/5 ring-1 ring-primary/20' 
+                      : 'bg-white border-transparent hover:border-slate-200 hover:shadow-md'}
+                  `}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-black text-sm text-slate-800">{patient.name}</span>
+                    {app && (
+                      <span className="flex items-center gap-1 text-[0.6rem] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-black animate-pulse">
+                        <CheckCircle2 size={10} /> وصل العيادة
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[0.65rem] text-slate-400 font-bold bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-wider">{patient.mrn}</span>
+                    <span className="text-[0.65rem] text-slate-400 font-bold">{patient.phone}</span>
+                  </div>
+                  {selectedPatient?.id === patient.id && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
 
@@ -295,63 +341,73 @@ export default function Clinic() {
       <div className="lg:col-span-3 space-y-6">
         {selectedPatient ? (
           <>
-            <Card className="border-t-4 border-t-primary">
-              <CardHeader className="flex flex-row items-center justify-between">
+            <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between bg-white p-6 rounded-2xl border shadow-sm">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-sky-600 flex items-center justify-center text-white text-2xl font-black shadow-lg shadow-primary/20">
+                  {selectedPatient.name.substring(0, 2)}
+                </div>
                 <div>
-                  <CardTitle className="text-2xl">{selectedPatient.name}</CardTitle>
-                  <p className="text-sm text-muted-foreground">الرقم الطبي: {selectedPatient.mrn} | الجوال: {selectedPatient.phone}</p>
+                  <h2 className="text-2xl font-black text-slate-800">{selectedPatient.name}</h2>
+                  <div className="flex items-center gap-3 mt-1 text-slate-500 font-medium text-sm">
+                    <span className="flex items-center gap-1"><FileText size={14} /> MRN: {selectedPatient.mrn}</span>
+                    <div className="w-1 h-1 rounded-full bg-slate-300" />
+                    <span className="flex items-center gap-1 uppercase tracking-tighter">{selectedPatient.gender === 'male' ? 'ذكر' : 'أنثى'} • {selectedPatient.bloodType || 'N/A'}</span>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="gap-1"
-                    onClick={() => setActiveTab('history')}
-                  >
-                    <History size={16} /> التاريخ المرضي
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    className="gap-1"
-                    onClick={() => setActiveTab('new-visit')}
-                  >
-                    <Plus size={16} /> إنشاء سجل طبي جديد
-                  </Button>
-                </div>
-              </CardHeader>
-            </Card>
+              </div>
+              <div className="flex gap-2 w-full md:w-auto">
+                <Button variant="outline" size="sm" className="flex-1 md:flex-none gap-2 rounded-xl h-11 px-5 border-slate-200 hover:bg-slate-50" onClick={() => setActiveTab('history')}>
+                  <History size={18} className="text-slate-400" /> السجل التاريخي
+                </Button>
+                <Button className="flex-1 md:flex-none gap-2 rounded-xl h-11 px-5 shadow-lg shadow-primary/25" onClick={() => setActiveTab('new-visit')}>
+                  <Plus size={18} /> جلسة جديدة
+                </Button>
+              </div>
+            </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-4 h-12">
-                <TabsTrigger value="new-visit" className="gap-2">
-                  <Plus size={16} /> معاينة جديدة
+              <TabsList className="w-full h-14 bg-slate-100/50 p-1.5 rounded-2xl gap-1">
+                <TabsTrigger value="new-visit" className="flex-1 h-full gap-2 rounded-xl text-xs font-black data-[state=active]:shadow-md">
+                  <Stethoscope size={18} /> معاينة سريرية
                 </TabsTrigger>
-                <TabsTrigger value="history" className="gap-2">
-                  <ClipboardList size={16} /> السجلات السابقة
+                <TabsTrigger value="history" className="flex-1 h-full gap-2 rounded-xl text-xs font-black data-[state=active]:shadow-md">
+                  <ClipboardList size={18} /> الأرشيف الطبي
                 </TabsTrigger>
-                <TabsTrigger value="prescriptions" className="gap-2">
-                  <Pill size={16} /> الوصفات
+                <TabsTrigger value="prescriptions" className="flex-1 h-full gap-2 rounded-xl text-xs font-black data-[state=active]:shadow-md">
+                  <Pill size={18} /> روشتات دوائية
                 </TabsTrigger>
-                <TabsTrigger value="requests" className="gap-2">
-                  <FlaskConical size={16} /> طلبات الفحص
+                <TabsTrigger value="requests" className="flex-1 h-full gap-2 rounded-xl text-xs font-black data-[state=active]:shadow-md">
+                  <FlaskConical size={18} /> الفحوصات
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="new-visit" className="mt-6">
+              <TabsContent value="new-visit" className="mt-6 space-y-6">
                 <form onSubmit={handleSaveVisit} className="space-y-6">
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label>الحرارة (°C)</Label>
-                      <Input value={newRecord.vitals.temperature} onChange={e => setNewRecord({...newRecord, vitals: {...newRecord.vitals, temperature: e.target.value}})} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>ضغط الدم</Label>
-                      <Input value={newRecord.vitals.bloodPressure} onChange={e => setNewRecord({...newRecord, vitals: {...newRecord.vitals, bloodPressure: e.target.value}})} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>الوزن (kg)</Label>
-                      <Input value={newRecord.vitals.weight} onChange={e => setNewRecord({...newRecord, vitals: {...newRecord.vitals, weight: e.target.value}})} />
-                    </div>
+                  {/* Vitals Grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    {[
+                      { label: 'الحرارة', unit: '°C', icon: Thermometer, key: 'temperature', color: 'text-orange-500', bg: 'bg-orange-50' },
+                      { label: 'النبض', unit: 'BPM', icon: Activity, key: 'pulse', color: 'text-rose-500', bg: 'bg-rose-50' },
+                      { label: 'الضغط', unit: 'mmHg', icon: Heart, key: 'bloodPressure', color: 'text-indigo-500', bg: 'bg-indigo-50' },
+                      { label: 'الأكسجين', unit: '%', icon: Heart, key: 'spO2', color: 'text-sky-500', bg: 'bg-sky-50' },
+                      { label: 'الوزن', unit: 'kg', icon: Weight, key: 'weight', color: 'text-emerald-500', bg: 'bg-emerald-50' },
+                    ].map(v => (
+                      <div key={v.key} className={`p-4 rounded-2xl border transition-all ${v.bg} border-transparent hover:border-slate-200 group`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <v.icon size={16} className={`${v.color} group-hover:scale-110 transition-transform`} />
+                          <Label className="text-[0.65rem] font-black text-slate-500 uppercase tracking-wider">{v.label}</Label>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Input 
+                            value={(newRecord.vitals as any)[v.key]} 
+                            onChange={e => setNewRecord({...newRecord, vitals: {...newRecord.vitals, [v.key]: e.target.value}})} 
+                            className="bg-white border-none h-9 text-center font-black text-lg focus-visible:ring-1 ring-primary/20"
+                            placeholder="0"
+                          />
+                          <span className="text-[0.6rem] font-bold text-slate-400">{v.unit}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
 
                   <div className="space-y-2">
@@ -489,7 +545,7 @@ export default function Clinic() {
                   <Card key={record.id}>
                     <CardHeader className="py-3 bg-muted/30">
                       <div className="flex justify-between items-center">
-                        <span className="font-bold text-primary">زيارة بتاريخ: {record.createdAt?.toDate().toLocaleDateString('ar-SA')}</span>
+                        <span className="font-bold text-primary">زيارة بتاريخ: {formatArabicDate(record.createdAt)}</span>
                         <span className="text-xs text-muted-foreground">الطبيب: {record.doctorName || record.doctorId}</span>
                       </div>
                     </CardHeader>

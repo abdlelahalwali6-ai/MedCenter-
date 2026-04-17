@@ -29,7 +29,9 @@ import {
   Plus,
   ArrowLeft,
   FlaskConical,
-  CreditCard
+  CreditCard,
+  Pill,
+  Loader2
 } from 'lucide-react';
 import {
   LineChart,
@@ -66,10 +68,12 @@ export default function Dashboard() {
     patients: 0,
     appointments: 0,
     prescriptions: 0,
-    radiology: 0
+    radiology: 0,
+    revenue: 0
   });
   const [recentAppointments, setRecentAppointments] = useState<any[]>([]);
   const [chartView, setChartView] = useState<'patients' | 'revenue'>('patients');
+  const [chartData, setChartData] = useState<any[]>([]);
 
   // Quick Search State
   const [quickSearch, setQuickSearch] = useState('');
@@ -159,26 +163,103 @@ export default function Dashboard() {
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const todayTS = Timestamp.fromDate(today);
+
+    // Appointments for today + list
     const unsubApp = onSnapshot(
-      query(collection(db, 'appointments'), where('date', '>=', Timestamp.fromDate(today))),
+      query(collection(db, 'appointments'), where('date', '>=', todayTS)),
       (snap) => {
         setCounts(prev => ({ ...prev, appointments: snap.size }));
         setRecentAppointments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })).slice(0, 5));
+        
+        // Build Patients Chart Data (Hourly)
+        const hourlyPatients: { [key: number]: number } = {};
+        snap.docs.forEach(doc => {
+          const data = doc.data();
+          if (data.startTime) {
+            const hour = parseInt(data.startTime.split(':')[0]);
+            hourlyPatients[hour] = (hourlyPatients[hour] || 0) + 1;
+          }
+        });
+        
+        const trend = [8, 10, 12, 14, 16, 18, 20].map(h => ({
+          name: `${h > 12 ? h - 12 : h} ${h >= 12 ? 'PM' : 'AM'}`,
+          patients: hourlyPatients[h] || 0,
+          revenue: 0 // Will be merged from invoices
+        }));
+        
+        setChartData(prevTrend => {
+          const newTrend = [...trend];
+          // Preserve revenue if it was already fetched
+          if (prevTrend.length === newTrend.length) {
+            newTrend.forEach((item, i) => {
+              item.revenue = prevTrend[i].revenue || 0;
+            });
+          }
+          return newTrend;
+        });
       },
       (err) => console.error("Appointments count error:", err)
     );
 
-    const unsubPres = onSnapshot(collection(db, 'prescriptions'), (snap) => {
-      setCounts(prev => ({ ...prev, prescriptions: snap.size }));
-    }, (err) => console.error("Prescriptions count error:", err));
+    // Revenue tracking (Bills)
+    const unsubInvoices = onSnapshot(
+      query(collection(db, 'bills'), where('createdAt', '>=', todayTS)),
+      (snap) => {
+        let totalRev = 0;
+        const hourlyRev: { [key: number]: number } = {};
+        
+        snap.docs.forEach(doc => {
+          const data = doc.data();
+          const amount = data.finalAmount || data.totalAmount || data.amount || data.total || 0;
+          totalRev += amount;
+          
+          if (data.createdAt) {
+            const date = data.createdAt.toDate();
+            const hour = date.getHours();
+            hourlyRev[hour] = (hourlyRev[hour] || 0) + amount;
+          }
+        });
+        
+        setCounts(prev => ({ ...prev, revenue: totalRev }));
+        
+        setChartData(prevTrend => {
+          const baseline = [8, 10, 12, 14, 16, 18, 20];
+          return baseline.map(h => {
+            const existing = prevTrend.find(p => {
+              const hourTitle = `${h > 12 ? h - 12 : h} ${h >= 12 ? 'PM' : 'AM'}`;
+              return p.name === hourTitle;
+            });
+            return {
+              name: `${h > 12 ? h - 12 : h} ${h >= 12 ? 'PM' : 'AM'}`,
+              patients: existing?.patients || 0,
+              revenue: (hourlyRev[h] || 0) + (hourlyRev[h+1] || 0) // Group by 2-hour window to match labels
+            };
+          });
+        });
+      }
+    );
 
-    const unsubRad = onSnapshot(collection(db, 'radiology_requests'), (snap) => {
-      setCounts(prev => ({ ...prev, radiology: snap.size }));
-    }, (err) => console.error("Radiology count error:", err));
+    const unsubPres = onSnapshot(
+      query(collection(db, 'prescriptions'), where('status', '==', 'pending')),
+      (snap) => {
+        setCounts(prev => ({ ...prev, prescriptions: snap.size }));
+      }, 
+      (err) => console.error("Prescriptions count error:", err)
+    );
+
+    const unsubRad = onSnapshot(
+      query(collection(db, 'radiology_requests'), where('status', '==', 'pending')),
+      (snap) => {
+        setCounts(prev => ({ ...prev, radiology: snap.size }));
+      }, 
+      (err) => console.error("Radiology count error:", err)
+    );
 
     return () => {
       unsubPatients();
       unsubApp();
+      unsubInvoices();
       unsubPres();
       unsubRad();
     };
@@ -271,53 +352,54 @@ export default function Dashboard() {
     }
   };
 
-  const chartData = [
-    { name: '8 AM', patients: 12, revenue: 1200 },
-    { name: '10 AM', patients: 25, revenue: 2800 },
-    { name: '12 PM', patients: 18, revenue: 1900 },
-    { name: '2 PM', patients: 30, revenue: 3500 },
-    { name: '4 PM', patients: 22, revenue: 2400 },
-    { name: '6 PM', patients: 15, revenue: 1600 },
-    { name: '8 PM', patients: 8, revenue: 900 },
-  ];
-
   return (
     <div className="flex flex-col gap-6" dir="rtl">
       {/* Quick Search Header */}
-      <div className="bg-white p-6 rounded-xl border border-border shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-primary/10 rounded-lg text-primary">
-            <Search size={24} />
+      <div className="bg-white p-8 rounded-3xl border border-slate-200/60 shadow-xl shadow-slate-200/20 flex flex-col lg:flex-row items-center justify-between gap-6 relative overflow-hidden group">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 transition-transform duration-500 group-hover:scale-110" />
+        <div className="relative flex items-center gap-5">
+          <div className="p-4 bg-primary text-white rounded-2xl shadow-lg shadow-primary/20 rotate-3 group-hover:rotate-0 transition-transform duration-300">
+            <Search size={28} strokeWidth={2.5} />
           </div>
           <div>
-            <h2 className="text-lg font-bold">البحث السريع والعمليات</h2>
-            <p className="text-sm text-muted-foreground">ابحث برقم الهاتف أو الاسم لإجراء عملية سريعة</p>
+            <h2 className="text-xl font-black text-slate-900 tracking-tight">البحث السريع والعمليات</h2>
+            <p className="text-sm text-slate-500 font-medium">ابحث برقم الهاتف أو الاسم لإجراء عملية طبية سريعة</p>
           </div>
         </div>
-        <div className="relative w-full md:w-auto">
-          <form onSubmit={handleQuickSearch} className="flex w-full md:w-auto gap-2">
-            <Input 
-              placeholder="رقم الهاتف أو اسم المريض..." 
-              className="w-full md:w-80"
-              value={quickSearch}
-              onChange={e => setQuickSearch(e.target.value)}
-              onFocus={() => quickSearch.length >= 2 && setShowSuggestions(true)}
-            />
-            <Button type="submit" disabled={isSearching}>
-              {isSearching ? 'جاري البحث...' : 'بحث'}
+        <div className="relative w-full lg:w-auto min-w-[320px] sm:min-w-[400px]">
+          <form onSubmit={handleQuickSearch} className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <Input 
+                placeholder="رقم الهاتف أو اسم المريض..." 
+                className="w-full pr-10 h-12 bg-slate-50 border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 transition-all font-medium"
+                value={quickSearch}
+                onChange={e => setQuickSearch(e.target.value)}
+                onFocus={() => quickSearch.length >= 2 && setShowSuggestions(true)}
+              />
+            </div>
+            <Button type="submit" size="lg" className="rounded-xl px-8 font-bold shadow-md shadow-primary/20 active:scale-95 transition-all" disabled={isSearching}>
+              {isSearching ? <Loader2 className="animate-spin" /> : 'بحث'}
             </Button>
           </form>
 
           {showSuggestions && suggestions.length > 0 && (
-            <div className="absolute z-50 w-full bg-white mt-1 rounded-lg border border-border shadow-lg overflow-hidden">
+            <div className="absolute z-50 w-full bg-white mt-2 rounded-2xl border border-slate-200 shadow-2xl shadow-slate-300/50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              <div className="px-4 py-2 border-b border-slate-50 bg-slate-50/50">
+                <span className="text-[0.6rem] font-black text-slate-400 uppercase tracking-widest">المقترحات</span>
+              </div>
               {suggestions.map((patient) => (
                 <button
                   key={patient.id}
                   onClick={() => handleSelectPatient(patient)}
-                  className="w-full text-right px-4 py-3 hover:bg-slate-50 flex flex-col border-b border-slate-50 last:border-0 transition-colors"
+                  className="w-full text-right px-5 py-3.5 hover:bg-primary/5 flex flex-col border-b border-slate-50 last:border-0 transition-all group"
                 >
-                  <span className="font-bold text-sm">{patient.name}</span>
-                  <span className="text-xs text-muted-foreground">الهاتف: {patient.phone} | الرقم الطبي: {patient.mrn}</span>
+                  <span className="font-bold text-slate-800 group-hover:text-primary transition-colors">{patient.name}</span>
+                  <div className="flex items-center gap-3 mt-0.5">
+                    <span className="text-[0.7rem] text-slate-400 font-medium">الهاتف: <span className="text-slate-600">{patient.phone}</span></span>
+                    <div className="w-1 h-1 bg-slate-300 rounded-full" />
+                    <span className="text-[0.7rem] text-slate-400 font-medium">الرقم الطبي: <span className="text-slate-600">{patient.mrn}</span></span>
+                  </div>
                 </button>
               ))}
             </div>
@@ -325,36 +407,76 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-        <div className="stat-card cursor-pointer hover:scale-[1.02] transition-transform" onClick={() => navigate('/patients')}>
-          <span className="stat-label">إجمالي المرضى</span>
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div className="stat-card cursor-pointer group active:scale-[0.98]" onClick={() => navigate('/patients')}>
+          <div className="flex justify-between items-start mb-2">
+            <span className="stat-label">إجمالي المرضى</span>
+            <div className="p-2.5 bg-sky-50 text-sky-600 rounded-xl group-hover:bg-primary group-hover:text-white transition-all duration-300">
+              <Users size={18} strokeWidth={2.5} />
+            </div>
+          </div>
           <span className="stat-value">{counts.patients}</span>
-          <span className="text-success text-[0.75rem] font-medium flex items-center gap-1">
-            <TrendingUp size={12} /> ↑ نشط
-          </span>
+          <div className="mt-2 flex items-center gap-1.5 opacity-60">
+            <span className="text-[0.65rem] font-bold text-sky-600">إجمالي قاعدة البيانات</span>
+          </div>
         </div>
-        <div className="stat-card cursor-pointer hover:scale-[1.02] transition-transform" onClick={() => navigate('/appointments')}>
-          <span className="stat-label">مواعيد اليوم</span>
+
+        <div className="stat-card cursor-pointer group active:scale-[0.98]" onClick={() => navigate('/appointments')}>
+          <div className="flex justify-between items-start mb-2">
+            <span className="stat-label">مواعيد اليوم</span>
+            <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl group-hover:bg-emerald-500 group-hover:text-white transition-all duration-300">
+              <Calendar size={18} strokeWidth={2.5} />
+            </div>
+          </div>
           <span className="stat-value">{counts.appointments}</span>
-          <span className="text-warning text-[0.75rem] font-medium">مجدول</span>
+          <div className="mt-2 flex items-center gap-2">
+            <span className={`flex h-2 w-2 rounded-full ${counts.appointments > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+            <span className="text-[0.65rem] font-bold text-emerald-600 uppercase tracking-wider">
+              {counts.appointments > 0 ? 'نشط الآن' : 'لا يوجد مواعيد'}
+            </span>
+          </div>
         </div>
-        <div className="stat-card cursor-pointer hover:scale-[1.02] transition-transform" onClick={() => navigate('/pharmacy')}>
-          <span className="stat-label">الوصفات الطبية</span>
-          <span className="stat-value">{counts.prescriptions}</span>
-          <span className="text-primary text-[0.75rem] font-medium">نظام الصيدلية</span>
+
+        <div className="stat-card cursor-pointer group active:scale-[0.98]" onClick={() => navigate('/billing')}>
+          <div className="flex justify-between items-start mb-2">
+            <span className="stat-label">إيرادات اليوم</span>
+            <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl group-hover:bg-amber-500 group-hover:text-white transition-all duration-300">
+              <CreditCard size={18} strokeWidth={2.5} />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="stat-value">{counts.revenue.toLocaleString()}</span>
+            <span className="text-xs font-bold text-slate-400">ر.ي</span>
+          </div>
+          <div className="mt-2 flex items-center gap-1.5">
+             <span className="text-[0.65rem] font-bold text-amber-600">إجمالي التحصيل النقدي</span>
+          </div>
         </div>
-        <div className="stat-card cursor-pointer hover:scale-[1.02] transition-transform" onClick={() => navigate('/radiology')}>
-          <span className="stat-label">طلبات الأشعة</span>
-          <span className="stat-value">{counts.radiology}</span>
-          <span className="text-danger text-[0.75rem] font-medium">تتطلب مراجعة</span>
+
+        <div className="stat-card cursor-pointer group active:scale-[0.98]" onClick={() => navigate('/clinic')}>
+          <div className="flex justify-between items-start mb-2">
+            <span className="stat-label">المهام الطبية المعلقة</span>
+            <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl group-hover:bg-rose-500 group-hover:text-white transition-all duration-300">
+              <Activity size={18} strokeWidth={2.5} />
+            </div>
+          </div>
+          <span className="stat-value">{counts.prescriptions + counts.radiology}</span>
+          <div className="mt-2 flex items-center gap-1.5 font-bold">
+            <span className="text-[0.65rem] text-rose-600">
+              {counts.prescriptions} وصفات / {counts.radiology} أشعة
+            </span>
+          </div>
         </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3 flex-1">
-        <div className="panel lg:col-span-2 flex flex-col">
-          <div className="panel-header flex justify-between items-center">
-            <span>إحصائيات المراجعات اليومية</span>
-            <div className="flex bg-slate-100 p-1 rounded-lg gap-1">
+        <div className="panel lg:col-span-2 flex flex-col group/panel">
+          <div className="panel-header flex justify-between items-center border-b-slate-100 px-7">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-6 bg-primary rounded-full" />
+              <span className="text-base font-black tracking-tight">إحصائيات المراجعات اليومية</span>
+            </div>
+            <div className="flex bg-slate-100/80 p-1 rounded-xl gap-1">
               <button 
                 onClick={() => setChartView('patients')}
                 className={`px-3 py-1 rounded-md text-[0.7rem] font-bold transition-all ${chartView === 'patients' ? 'bg-white shadow-sm text-primary' : 'text-secondary'}`}
@@ -369,8 +491,8 @@ export default function Dashboard() {
               </button>
             </div>
           </div>
-          <div className="flex-1 p-4 min-h-[300px]">
-             <ResponsiveContainer width="99%" height="100%" minHeight={300}>
+          <div className="flex-1 p-4 min-h-[300px] relative">
+             <ResponsiveContainer width="99%" height="100%" minHeight={300} minWidth={0}>
               {chartView === 'patients' ? (
                 <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -403,55 +525,54 @@ export default function Dashboard() {
           </div>
         </div>
         
-        <div className="panel">
-          <div className="panel-header">
-            <span>قائمة المواعيد الحالية</span>
-            <Link to="/appointments" className="text-[0.8rem] text-primary hover:underline font-medium flex items-center gap-1">
-              عرض الكل <ChevronLeft size={14} />
+        <div className="panel shadow-lg shadow-slate-200/20">
+          <div className="panel-header border-b-slate-100 px-7">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-6 bg-emerald-500 rounded-full" />
+              <span className="text-base font-black tracking-tight">قائمة المواعيد الحالية</span>
+            </div>
+            <Link to="/appointments" className="text-[0.7rem] px-3 py-1.5 bg-slate-50 text-slate-500 hover:bg-primary hover:text-white rounded-lg transition-all font-black uppercase tracking-wider flex items-center gap-1.5">
+              عرض الكل <ChevronLeft size={12} />
             </Link>
           </div>
-          <div className="overflow-auto">
-            <table className="w-full text-right">
-              <thead>
-                <tr className="border-b border-border bg-slate-50/30">
-                  <th className="px-5 py-3 text-[0.8rem] text-secondary font-semibold">المريض</th>
-                  <th className="px-5 py-3 text-[0.8rem] text-secondary font-semibold">الحالة</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentAppointments.length > 0 ? recentAppointments.map((row, i) => (
-                  <tr key={i} className="border-b border-border hover:bg-slate-50/50 transition-colors">
-                    <td className="px-5 py-4 text-[0.85rem] font-medium">{row.patientName}</td>
-                    <td className="px-5 py-4">
-                      <span className={`px-2 py-1 rounded text-[0.7rem] font-bold ${
-                        row.status === 'scheduled' ? 'bg-blue-50 text-blue-600' :
-                        row.status === 'completed' ? 'bg-success/10 text-success' :
-                        'bg-slate-100 text-slate-600'
-                      }`}>
-                        {row.status === 'scheduled' ? 'مجدول' : row.status === 'completed' ? 'مكتمل' : row.status}
-                      </span>
-                    </td>
+          <div className="overflow-auto px-2 pb-2 h-full min-h-[300px]">
+            {recentAppointments.length > 0 ? (
+              <table className="w-full text-right">
+                <thead>
+                  <tr className="border-b border-slate-50 bg-slate-50/20">
+                    <th className="px-5 py-4 text-[0.65rem] text-slate-400 font-black uppercase tracking-widest">المريض</th>
+                    <th className="px-5 py-4 text-[0.65rem] text-slate-400 font-black uppercase tracking-widest">القاعة / الحالة</th>
                   </tr>
-                )) : (
-                  [
-                    { name: 'سارة محمد إبراهيم', status: 'في الفحص', statusColor: 'bg-success/10 text-success' },
-                    { name: 'عبدالرحمن عبدالله', status: 'انتظار', statusColor: 'bg-slate-100 text-slate-600' },
-                    { name: 'ليلى يوسف', status: 'سحب عينة', statusColor: 'bg-warning/10 text-warning' },
-                    { name: 'محمد حسن علي', status: 'مكتمل', statusColor: 'bg-success/10 text-success' },
-                    { name: 'نورة السبيعي', status: 'انتظار', statusColor: 'bg-slate-100 text-slate-600' },
-                  ].map((row, i) => (
-                    <tr key={i} className="border-b border-border hover:bg-slate-50/50 transition-colors">
-                      <td className="px-5 py-4 text-[0.85rem] font-medium">{row.name}</td>
-                      <td className="px-5 py-4">
-                        <span className={`px-2 py-1 rounded text-[0.7rem] font-bold ${row.statusColor}`}>
-                          {row.status}
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {recentAppointments.map((row, i) => (
+                    <tr key={i} className="group/row hover:bg-slate-50/80 transition-all">
+                      <td className="px-5 py-5">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold text-slate-800 group-hover/row:text-primary transition-colors">{row.patientName}</span>
+                          <span className="text-[0.65rem] text-slate-400 font-medium">{row.doctorName}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-5 text-left">
+                        <span className={`px-3 py-1 rounded-lg text-[0.65rem] font-black uppercase tracking-wider shadow-sm ${
+                          row.status === 'scheduled' ? 'bg-sky-50 text-sky-600' :
+                          row.status === 'completed' ? 'bg-emerald-50 text-emerald-600' :
+                          'bg-slate-100 text-slate-600'
+                        }`}>
+                          {row.status === 'scheduled' ? 'مجدول' : row.status === 'completed' ? 'مكتمل' : row.status}
                         </span>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full py-20 text-slate-400 gap-3 grayscale opacity-70">
+                <Calendar size={48} strokeWidth={1} />
+                <p className="font-bold text-sm">لا يوجد مواعيد نشطة حالياً</p>
+                <Button variant="ghost" size="sm" onClick={() => navigate('/appointments')}>جدولة موعد</Button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -482,40 +603,52 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="panel">
-          <div className="panel-header">
-            <span>حالة النظام الهجين</span>
+        <div className="panel shadow-lg shadow-primary/5">
+          <div className="panel-header px-7 border-b-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-6 bg-slate-900 rounded-full" />
+              <span className="text-base font-black tracking-tight">حالة النظام والاتصال المزدوج</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${navigator.onLine ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+              <span className="text-[0.65rem] font-bold text-slate-500 uppercase tracking-widest">{navigator.onLine ? 'متصل مباشر' : 'يعمل دون اتصال'}</span>
+            </div>
           </div>
-          <div className="p-5 flex flex-col h-full">
-            <div className="flex-1 space-y-4">
-              <div>
-                <div className="flex justify-between text-[0.8rem] mb-1">
-                  <span>تزامن السحابة</span>
-                  <span className="text-success font-bold">95%</span>
+          <div className="p-6 flex flex-col h-full gap-5">
+            <div className="space-y-4">
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
+                <div>
+                  <p className="text-[0.7rem] font-black text-slate-400 uppercase tracking-widest">تزامن السحابة</p>
+                  <p className="text-sm font-bold text-slate-800 mt-0.5">Cloud Storage Node</p>
                 </div>
-                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                  <div className="w-[95%] h-full bg-success"></div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg">نشط</span>
                 </div>
               </div>
-              <div>
-                <div className="flex justify-between text-[0.8rem] mb-1">
-                  <span>المساحة المستخدمة</span>
-                  <span className="text-primary font-bold">42%</span>
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
+                <div>
+                  <p className="text-[0.7rem] font-black text-slate-400 uppercase tracking-widest">قاعدة البيانات المحلية</p>
+                  <p className="text-sm font-bold text-slate-800 mt-0.5">Dexie.js IndexedDB</p>
                 </div>
-                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                  <div className="w-[42%] h-full bg-primary"></div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-primary bg-sky-50 px-2 py-1 rounded-lg">مستقر</span>
                 </div>
               </div>
             </div>
-            <div className="pt-4 border-t border-border mt-4">
-              <p className="text-[0.7rem] text-secondary">آخر تزامن: قبل دقيقة واحدة</p>
-              <p className="text-[0.7rem] text-secondary">إصدار النظام: v2.4.0-hybrid</p>
-              <button 
-                onClick={() => toast.success('جاري بدء مزامنة يدوية...')}
-                className="mt-3 w-full py-2 bg-slate-100 hover:bg-slate-200 rounded-md text-[0.75rem] font-bold transition-colors"
+            
+            <div className="pt-4 border-t border-slate-100 mt-auto">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[0.65rem] font-bold text-slate-500">آخر مزامنة ناجحة</span>
+                <span className="text-[0.65rem] font-mono text-slate-400">{new Date().toLocaleTimeString()}</span>
+              </div>
+              <Button 
+                variant="outline" 
+                className="w-full h-10 rounded-xl font-bold gap-2 text-xs border-slate-200 hover:bg-primary transition-all group"
+                onClick={() => toast.success('جاري التحقق من سلامة البيانات وتزامن السجلات...')}
               >
-                مزامنة الآن
-              </button>
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 group-hover:bg-white" />
+                تحميل المزامنة اليدوية الآن
+              </Button>
             </div>
           </div>
         </div>

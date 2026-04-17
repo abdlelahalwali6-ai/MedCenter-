@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, orderBy, updateDoc, deleteDoc, doc, serverTimestamp, where, addDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
+import { formatArabicDate } from '@/src/lib/dateUtils';
 import { localDB } from '@/src/lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { logAction } from '@/src/lib/audit';
@@ -795,7 +796,7 @@ export default function Pharmacy() {
                       </div>
                     </TableCell>
                     <TableCell>{pres.doctorName}</TableCell>
-                    <TableCell>{pres.createdAt?.toDate().toLocaleDateString('ar-SA')}</TableCell>
+                    <TableCell>{formatArabicDate(pres.createdAt)}</TableCell>
                     <TableCell>
                       <span className={`px-2 py-1 rounded text-[0.7rem] font-bold ${
                         pres.status === 'dispensed' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'

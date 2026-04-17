@@ -7,8 +7,9 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { collection, query, onSnapshot, orderBy, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, where } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
+import { formatArabicDate, toDate } from '@/src/lib/dateUtils';
 import { logAction } from '@/src/lib/audit';
-import { Bill, Patient, ServiceCatalogItem, ServiceRequest, BillItem } from '@/src/types';
+import { Bill, Patient, ServiceCatalogItem, ServiceRequest, BillItem, UserProfile } from '@/src/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -22,7 +23,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CreditCard, Search, Plus, FileText, Download, TrendingUp, Trash2, Printer, Wallet, Banknote, ClipboardList, CheckCircle } from 'lucide-react';
+import { CreditCard, Search, Plus, FileText, Download, TrendingUp, Trash2, Printer, Wallet, Banknote, ClipboardList, CheckCircle, Filter } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/src/context/AuthContext';
 
@@ -35,6 +36,7 @@ export default function Billing() {
 
   const [bills, setBills] = useState<Bill[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [doctors, setDoctors] = useState<UserProfile[]>([]);
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
   const [servicesCatalog, setServicesCatalog] = useState<ServiceCatalogItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -45,10 +47,18 @@ export default function Billing() {
     start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
     end: new Date().toISOString().split('T')[0]
   });
+  const [reportFilters, setReportFilters] = useState({
+    patientId: 'all',
+    doctorId: 'all',
+    type: 'all',
+    costCenter: 'all'
+  });
   const [newBill, setNewBill] = useState({
     patientId: '',
+    doctorId: '',
     requestId: '',
     type: 'clinic' as Bill['type'],
+    costCenter: 'مركز العيادات',
     items: [{ description: '', amount: 0, quantity: 1 }] as BillItem[],
     discountAmount: 0,
     taxAmount: 0,
@@ -87,7 +97,13 @@ export default function Billing() {
       setServicesCatalog(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ServiceCatalogItem[]);
     });
 
-    return () => { unsub(); unsubPat(); unsubRequests(); unsubCatalog(); };
+    const unsubDoc = onSnapshot(query(collection(db, 'users')), (snapshot) => {
+      setDoctors(snapshot.docs
+        .map(doc => ({ uid: doc.id, ...doc.data() }))
+        .filter((u: any) => u.role === 'doctor') as UserProfile[]);
+    });
+
+    return () => { unsub(); unsubPat(); unsubRequests(); unsubCatalog(); unsubDoc(); };
   }, [profile, patientIdFromUrl]);
 
   const handleCreateBill = async (e: React.FormEvent) => {
@@ -99,10 +115,15 @@ export default function Billing() {
     const insuranceDiscount = (totalAmount * (newBill.insuranceCoverage || 0)) / 100;
     const finalAmount = totalAmount + newBill.taxAmount - newBill.discountAmount - insuranceDiscount;
 
+    const doctor = doctors.find(d => d.uid === newBill.doctorId);
+
     try {
       const billRef = await addDoc(collection(db, 'bills'), {
         patientId: patient.id,
         patientName: patient.name,
+        doctorId: doctor?.uid || null,
+        doctorName: doctor?.displayName || null,
+        costCenter: newBill.costCenter,
         type: newBill.type,
         items: newBill.items,
         totalAmount,
@@ -154,8 +175,12 @@ export default function Billing() {
   const handleCreateBillFromRequest = (req: ServiceRequest) => {
     setNewBill({
       patientId: req.patientId,
+      doctorId: req.doctorId,
       requestId: req.id,
-      type: 'clinic',
+      type: req.costCenter === 'مركز الصيدلية' ? 'pharmacy' : 
+            req.costCenter === 'مركز المختبر' ? 'lab' : 
+            req.costCenter === 'مركز الأشعة' ? 'radiology' : 'clinic',
+      costCenter: req.costCenter || 'مركز العيادات',
       items: [{ description: req.serviceName, amount: req.price, quantity: 1 }],
       discountAmount: 0,
       taxAmount: 0,
@@ -344,11 +369,18 @@ export default function Billing() {
 
   const filteredReportBills = bills.filter(b => {
     if (!b.createdAt) return false;
-    const date = b.createdAt.toDate();
+    const date = toDate(b.createdAt);
     const start = new Date(reportRange.start);
     const end = new Date(reportRange.end);
     end.setHours(23, 59, 59, 999);
-    return date >= start && date <= end;
+    
+    const matchesDate = date >= start && date <= end;
+    const matchesPatient = reportFilters.patientId === 'all' || b.patientId === reportFilters.patientId;
+    const matchesDoctor = reportFilters.doctorId === 'all' || b.doctorId === reportFilters.doctorId;
+    const matchesType = reportFilters.type === 'all' || b.type === reportFilters.type;
+    const matchesCostCenter = reportFilters.costCenter === 'all' || b.costCenter === reportFilters.costCenter;
+
+    return matchesDate && matchesPatient && matchesDoctor && matchesType && matchesCostCenter;
   });
 
   const reportRevenue = filteredReportBills.filter(b => b.status === 'paid').reduce((acc, b) => acc + (b.finalAmount || b.totalAmount), 0);
@@ -370,7 +402,7 @@ export default function Billing() {
             </DialogHeader>
             <form onSubmit={handleCreateBill} className="space-y-6 py-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+                <div className="space-y-2 text-right">
                   <Label>المريض</Label>
                   <select 
                     className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -382,7 +414,21 @@ export default function Billing() {
                     {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 text-right">
+                  <Label>الطبيب (اختياري)</Label>
+                  <select 
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={newBill.doctorId}
+                    onChange={e => setNewBill({...newBill, doctorId: e.target.value})}
+                  >
+                    <option value="">اختر الطبيب...</option>
+                    {doctors.map(d => <option key={d.uid} value={d.uid}>{d.displayName}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2 text-right">
                   <Label>نوع الفاتورة</Label>
                   <select 
                     className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -395,6 +441,21 @@ export default function Billing() {
                     <option value="lab">مختبر</option>
                     <option value="radiology">أشعة</option>
                     <option value="other">أخرى</option>
+                  </select>
+                </div>
+                <div className="space-y-2 text-right">
+                  <Label>مركز التكلفة</Label>
+                  <select 
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={newBill.costCenter}
+                    onChange={e => setNewBill({...newBill, costCenter: e.target.value})}
+                    required
+                  >
+                    <option value="مركز العيادات">مركز العيادات</option>
+                    <option value="مركز الصيدلية">مركز الصيدلية</option>
+                    <option value="مركز المختبر">مركز المختبر</option>
+                    <option value="مركز الأشعة">مركز الأشعة</option>
+                    <option value="أخرى">أخرى</option>
                   </select>
                 </div>
               </div>
@@ -609,7 +670,7 @@ export default function Billing() {
                       </span>
                     </TableCell>
                     <TableCell className="font-bold text-primary">{(inv.finalAmount || inv.totalAmount).toLocaleString()} ر.ي</TableCell>
-                    <TableCell>{inv.createdAt?.toDate().toLocaleDateString('ar-SA')}</TableCell>
+                    <TableCell>{formatArabicDate(inv.createdAt)}</TableCell>
                     <TableCell>
                       <span className={`px-2 py-1 rounded text-[0.7rem] font-bold ${
                         inv.status === 'paid' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'
@@ -700,19 +761,104 @@ export default function Billing() {
           </div>
         </TabsContent>
         <TabsContent value="reports" className="mt-6 space-y-6">
-          <Card>
-            <CardContent className="p-4 flex flex-wrap items-end gap-4">
-              <div className="space-y-1">
-                <Label className="text-xs">من تاريخ</Label>
-                <Input type="date" value={reportRange.start} onChange={e => setReportRange({...reportRange, start: e.target.value})} className="w-40" />
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-bold flex items-center gap-2">
+                <Filter size={18} /> فلاتر التقرير المتقدمة
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-xs">من تاريخ</Label>
+                  <Input type="date" value={reportRange.start} onChange={e => setReportRange({...reportRange, start: e.target.value})} className="h-9" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">إلى تاريخ</Label>
+                  <Input type="date" value={reportRange.end} onChange={e => setReportRange({...reportRange, end: e.target.value})} className="h-9" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">المريض</Label>
+                  <select 
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs"
+                    value={reportFilters.patientId}
+                    onChange={e => setReportFilters({...reportFilters, patientId: e.target.value})}
+                  >
+                    <option value="all">كل المرضى</option>
+                    {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">الطبيب</Label>
+                  <select 
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs"
+                    value={reportFilters.doctorId}
+                    onChange={e => setReportFilters({...reportFilters, doctorId: e.target.value})}
+                  >
+                    <option value="all">كل الأطباء</option>
+                    {doctors.map(d => <option key={d.uid} value={d.uid}>{d.displayName}</option>)}
+                  </select>
+                </div>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">إلى تاريخ</Label>
-                <Input type="date" value={reportRange.end} onChange={e => setReportRange({...reportRange, end: e.target.value})} className="w-40" />
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-xs">نوع الخدمة</Label>
+                  <select 
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs"
+                    value={reportFilters.type}
+                    onChange={e => setReportFilters({...reportFilters, type: e.target.value})}
+                  >
+                    <option value="all">كل الأنواع</option>
+                    <option value="clinic">عيادة</option>
+                    <option value="pharmacy">صيدلية</option>
+                    <option value="lab">مختبر</option>
+                    <option value="radiology">أشعة</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">مركز التكلفة</Label>
+                  <select 
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs"
+                    value={reportFilters.costCenter}
+                    onChange={e => setReportFilters({...reportFilters, costCenter: e.target.value})}
+                  >
+                    <option value="all">كل مراكز التكلفة</option>
+                    <option value="مركز العيادات">مركز العيادات</option>
+                    <option value="مركز الصيدلية">مركز الصيدلية</option>
+                    <option value="مركز المختبر">مركز المختبر</option>
+                    <option value="مركز الأشعة">مركز الأشعة</option>
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <Button 
+                    variant="outline" 
+                    className="w-full h-9 gap-2 border-primary text-primary"
+                    onClick={() => {
+                      setReportRange({
+                        start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
+                        end: new Date().toISOString().split('T')[0]
+                      });
+                      setReportFilters({ patientId: 'all', doctorId: 'all', type: 'all', costCenter: 'all' });
+                    }}
+                  >
+                    إعادة تعيين
+                  </Button>
+                </div>
               </div>
-              <div className="flex-1 text-left">
-                <p className="text-sm text-muted-foreground">إجمالي إيرادات الفترة المختارة</p>
-                <p className="text-2xl font-bold text-primary">{reportRevenue.toLocaleString()} ر.ي</p>
+
+              <div className="pt-4 border-t flex justify-between items-center">
+                <div className="flex gap-4">
+                  <div className="text-right">
+                    <p className="text-[0.65rem] text-muted-foreground uppercase font-bold tracking-wider">إجمالي الإيرادات (للفلترة الحالية)</p>
+                    <p className="text-xl font-black text-primary">{reportRevenue.toLocaleString()} ر.ي</p>
+                  </div>
+                  <div className="text-right border-r pr-4">
+                    <p className="text-[0.65rem] text-muted-foreground uppercase font-bold tracking-wider">عدد الفواتير</p>
+                    <p className="text-xl font-black text-slate-700">{filteredReportBills.length}</p>
+                  </div>
+                </div>
+                <Button className="gap-2"> <Download size={16} /> تصدير التقرير </Button>
               </div>
             </CardContent>
           </Card>

@@ -10,11 +10,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Settings as SettingsIcon, Bell, Shield, Database, Globe, Smartphone, Loader2, DatabaseBackup, Github, GitBranch, Link } from 'lucide-react';
+import { Settings as SettingsIcon, Bell, Shield, Database, Globe, Smartphone, Loader2, DatabaseBackup, Github, GitBranch, Link, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/src/context/AuthContext';
 import { seedLabCatalog } from '@/src/lib/seedLab';
 import { seedPharmacyAndRadiology } from '@/src/lib/seedData';
+import { logAction } from '@/src/lib/audit';
 
 import { 
   Dialog,
@@ -35,14 +36,16 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showSeedConfirm, setShowSeedConfirm] = useState(false);
-  const [activeTab, setActiveTab] = useState<'general' | 'security' | 'notifications' | 'backup' | 'github'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'clinic' | 'security' | 'permissions' | 'notifications' | 'backup' | 'github'>('general');
   
   const [settings, setSettings] = useState({
-    centerNameAr: 'مركز رعاية المريض الطبي',
-    centerNameEn: 'Patient Care Medical Center',
+    centerNameAr: 'مد كير الطبي',
+    centerNameEn: 'MedCare Medical Center',
     address: 'الرياض، المملكة العربية السعودية',
     phone: '+966 11 000 0000',
     email: 'info@medcenter.sa',
+    taxId: '3000100020003',
+    costCenter: 'CC-001',
     mobileAppEnabled: true,
     autoSyncEnabled: true,
     twoFactorAuth: false,
@@ -54,7 +57,11 @@ export default function Settings() {
     githubEnabled: false,
     githubToken: '',
     githubRepo: 'owner/repo',
-    autoExportEnabled: false
+    autoExportEnabled: false,
+    pharmacyModule: true,
+    labModule: true,
+    radiologyModule: true,
+    billingModule: true
   });
 
   useEffect(() => {
@@ -85,6 +92,7 @@ export default function Settings() {
         ...settings,
         updatedAt: serverTimestamp()
       });
+      await logAction(profile, 'تحديث الإعدادات', 'settings', 'global', `تم تحديث إعدادات النظام وتعديل الموديلات ${Object.keys(settings).filter(k => k.includes('Module') && (settings as any)[k]).join(', ')}`);
       toast.success('تم حفظ الإعدادات بنجاح');
     } catch (error) {
       toast.error('فشل حفظ الإعدادات');
@@ -417,6 +425,100 @@ export default function Settings() {
             </CardContent>
           </Card>
         );
+      case 'clinic':
+        return (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>الإعدادات المالية والضريبية</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>الرقم الضريبي الموحد</Label>
+                    <Input 
+                      value={settings.taxId} 
+                      onChange={e => setSettings({...settings, taxId: e.target.value})} 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>مركز التكلفة الافتراضي</Label>
+                    <Input 
+                      value={settings.costCenter} 
+                      onChange={e => setSettings({...settings, costCenter: e.target.value})} 
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>تفعيل الموديلات (Modules)</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-4">
+                {[
+                  { id: 'pharmacyModule', label: 'نظام الصيدلية والمخزون' },
+                  { id: 'labModule', label: 'نظام المختبر والنتائج' },
+                  { id: 'radiologyModule', label: 'نظام الأشعة وPACS' },
+                  { id: 'billingModule', label: 'نظام الفوترة والتأمين' }
+                ].map((mod) => (
+                  <div key={mod.id} className="flex items-center justify-between p-3 border rounded-xl">
+                    <span className="text-sm font-bold">{mod.label}</span>
+                    <div 
+                      className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${(settings as any)[mod.id] ? 'bg-primary' : 'bg-muted'}`}
+                      onClick={() => isAdmin && setSettings({...settings, [mod.id]: !(settings as any)[mod.id]})}
+                    >
+                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${(settings as any)[mod.id] ? 'right-0.5' : 'right-5.5'}`}></div>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        );
+      case 'permissions':
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>الصلاحيات الموحدة للنظام</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="overflow-auto border rounded-xl">
+                <table className="w-full text-right text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-3 font-bold border-b">الدور (Role)</th>
+                      <th className="px-4 py-3 font-bold border-b">وصف الصلاحيات</th>
+                      <th className="px-4 py-3 font-bold border-b text-center">الوصول</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { role: 'admin', desc: 'كامل الصلاحيات، الإعدادات، الموارد البشرية، والتقارير المالية', access: 'كامل' },
+                      { role: 'doctor', desc: 'إدارة المواعيد، المعاينة الطبية، الوصفات، وطلب الفحوصات', access: 'طبي' },
+                      { role: 'nurse', desc: 'تسجيل المرضى، أخذ العلامات الحيوية، وتجهيز المواعيد', access: 'طبي/إداري' },
+                      { role: 'lab_tech', desc: 'إدارة طلبات المختبر، إدخال النتائج، وإدارة الكواشف', access: 'تخصصي' },
+                      { role: 'pharmacist', desc: 'صرف الأدوية، إدارة المخزون، والتعامل مع الفواتير الدوائية', access: 'تخصصي' },
+                      { role: 'reception', desc: 'حجز المواعيد، الفوترة، تسجيل الزيارات، والاستقبال', access: 'إداري' },
+                    ].map((r) => (
+                      <tr key={r.role} className="hover:bg-slate-50/50">
+                        <td className="px-4 py-3 font-bold text-primary border-b uppercase">{r.role}</td>
+                        <td className="px-4 py-3 text-slate-500 border-b">{r.desc}</td>
+                        <td className="px-4 py-3 border-b text-center">
+                          <span className="px-2 py-0.5 bg-sky-50 text-sky-600 rounded text-[0.65rem] font-black uppercase tracking-wider">{r.access}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[0.65rem] text-muted-foreground italic mt-2">
+                * يتم التحكم بالصلاحيات بناءً على الأدوار المعرفة في النظام لضمان أعلى درجات الأمان وحماية البيانات الصحية (HIPAA).
+              </p>
+            </CardContent>
+          </Card>
+        );
       default:
         return null;
     }
@@ -455,12 +557,30 @@ export default function Settings() {
             </CardContent>
           </Card>
           <Card 
+            className={`cursor-pointer transition-all ${activeTab === 'clinic' ? 'border-r-4 border-r-primary bg-sky-50/30' : 'hover:bg-muted'}`}
+            onClick={() => setActiveTab('clinic')}
+          >
+            <CardContent className="p-4 flex items-center gap-3">
+              <DatabaseBackup size={20} className={activeTab === 'clinic' ? 'text-primary' : 'text-secondary'} />
+              <span className={activeTab === 'clinic' ? 'font-bold' : 'font-medium'}>إعدادات المؤسسة</span>
+            </CardContent>
+          </Card>
+          <Card 
             className={`cursor-pointer transition-all ${activeTab === 'security' ? 'border-r-4 border-r-primary bg-sky-50/30' : 'hover:bg-muted'}`}
             onClick={() => setActiveTab('security')}
           >
             <CardContent className="p-4 flex items-center gap-3">
               <Shield size={20} className={activeTab === 'security' ? 'text-primary' : 'text-secondary'} />
-              <span className={activeTab === 'security' ? 'font-bold' : 'font-medium'}>الأمان والصلاحيات</span>
+              <span className={activeTab === 'security' ? 'font-bold' : 'font-medium'}>الأمان والحماية</span>
+            </CardContent>
+          </Card>
+          <Card 
+            className={`cursor-pointer transition-all ${activeTab === 'permissions' ? 'border-r-4 border-r-primary bg-sky-50/30' : 'hover:bg-muted'}`}
+            onClick={() => setActiveTab('permissions')}
+          >
+            <CardContent className="p-4 flex items-center gap-3">
+              <ShieldCheck size={20} className={activeTab === 'permissions' ? 'text-primary' : 'text-secondary'} />
+              <span className={activeTab === 'permissions' ? 'font-bold' : 'font-medium'}>إدارة الصلاحيات</span>
             </CardContent>
           </Card>
           <Card 

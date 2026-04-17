@@ -3,36 +3,45 @@
 @theme {
   --color-primary: #0284c7;
   --color-secondary: #64748b;
-  --color-success: #22c55e;
+  --color-success: #10b981;
   --color-danger: #ef4444;
   --color-warning: #f59e0b;
-  --color-background: #f8fafc;
+  --color-background: #F8FAFC;
   --color-sidebar: #ffffff;
-  --color-foreground: #1e293b;
+  --color-foreground: #0f172a;
   --color-border: #e2e8f0;
   
-  --radius-lg: 12px;
-  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
 }
 
 @layer base {
   body {
-    @apply bg-background text-foreground;
-    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    @apply bg-background text-foreground tracking-tight;
+    font-family: 'Geist Variable', 'Inter', system-ui, -apple-system, sans-serif;
   }
 }
 
 @layer components {
   .panel {
-    @apply bg-white rounded-lg border border-border flex flex-col overflow-hidden shadow-sm;
+    @apply bg-white rounded-2xl border border-slate-200/60 flex flex-col overflow-hidden shadow-sm shadow-slate-200/40 transition-all duration-300;
   }
   
   .panel-header {
-    @apply px-5 py-4 border-b border-border flex justify-between items-center font-semibold bg-slate-50/50;
+    @apply px-6 py-4 border-b border-slate-100 flex justify-between items-center font-bold text-slate-800 bg-white;
   }
   
   .stat-card {
-    @apply bg-white p-5 rounded-lg border border-border flex flex-col gap-2 shadow-sm hover:shadow-md transition-shadow;
+    @apply bg-white p-6 rounded-2xl border border-slate-200/60 flex flex-col gap-1 shadow-sm shadow-slate-200/40 hover:shadow-lg hover:shadow-primary/5 hover:border-primary/20 transition-all duration-300;
+  }
+
+  .stat-label {
+    @apply text-[0.7rem] font-black uppercase tracking-[0.1em] text-slate-400 group-hover:text-primary transition-colors;
+  }
+
+  .stat-value {
+    @apply text-2xl font-black text-slate-900 tracking-tighter;
   }
 }
 @import "tw-animate-css";

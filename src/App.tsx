@@ -78,31 +78,40 @@ function AppContent() {
       <PWAManager />
       <div className="flex min-h-screen w-full bg-background" dir="rtl">
         <AppSidebar />
-        <main className="flex-1 flex flex-col p-6 gap-6 overflow-auto relative">
-          <header className="flex justify-between items-center bg-white px-6 py-4 rounded-xl border border-border shadow-sm">
+        <main className="flex-1 flex flex-col min-h-screen overflow-hidden relative">
+          <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-white/80 px-6 backdrop-blur-md">
             <div className="flex items-center gap-4">
-              <SidebarTrigger className="text-secondary hover:text-primary transition-colors" />
-              <div className="h-8 w-px bg-border mx-2" />
-              <div>
-                <h1 className="text-xl font-bold text-foreground">مرحباً، {profile?.displayName || 'د. أحمد علي'}</h1>
-                <p className="text-[0.85rem] text-secondary">
+              <SidebarTrigger className="h-9 w-9 text-slate-500 hover:bg-slate-100 hover:text-primary transition-all" />
+              <div className="h-6 w-px bg-slate-200 mx-1 hidden sm:block" />
+              <div className="hidden sm:block">
+                <h2 className="text-sm font-bold text-slate-800 leading-none mb-1">
+                  نظام الإدارة المتكامل
+                </h2>
+                <p className="text-[0.65rem] text-muted-foreground font-medium uppercase tracking-wider">
                   {new Intl.DateTimeFormat('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).format(new Date())}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="text-left">
-                <p className="font-semibold text-[0.9rem] leading-tight">{profile?.displayName || 'أحمد علي'}</p>
-                <p className="text-[0.75rem] text-secondary">{profile?.role === 'admin' ? 'المدير الطبي' : profile?.role}</p>
+
+            <div className="flex items-center gap-4">
+              <div className="flex flex-col items-end hidden md:flex">
+                <span className="text-[0.8rem] font-black text-slate-900 leading-none mb-0.5">
+                  {profile?.displayName || 'مستخدم'}
+                </span>
+                <span className="text-[0.6rem] font-bold text-primary uppercase tracking-tighter bg-primary/10 px-1.5 py-0.5 rounded-md">
+                  {profile?.role === 'admin' ? 'المدير الطبي' : profile?.role === 'doctor' ? 'طبيب متخصص' : profile?.role}
+                </span>
               </div>
-              <div className="w-10 h-10 rounded-full bg-slate-100 border border-border flex items-center justify-center font-bold text-primary shadow-sm">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-slate-100 to-slate-50 border border-slate-200 flex items-center justify-center font-black text-primary text-xs shadow-sm ring-2 ring-white ring-offset-2 ring-offset-slate-100">
                 {profile?.displayName?.substring(0, 2) || 'أ.ع'}
               </div>
             </div>
           </header>
-          <div className="flex-1 flex flex-col gap-6">
-            <Suspense fallback={<PageLoader />}>
-              <Routes>
+
+          <div className="flex-1 overflow-auto bg-[#F8FAFC] p-4 lg:p-8">
+            <div className="mx-auto w-full max-w-7xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <Suspense fallback={<PageLoader />}>
+                <Routes>
                 <Route path="/" element={profile?.role === 'patient' ? <Navigate to="/patient" replace /> : <Dashboard />} />
                 <Route path="/patients" element={<Patients />} />
                 <Route path="/appointments" element={<Appointments />} />
@@ -129,10 +138,11 @@ function AppContent() {
               </Routes>
             </Suspense>
           </div>
-        </main>
-      </div>
-      <Toaster position="top-center" />
-    </SidebarProvider>
+        </div>
+      </main>
+    </div>
+    <Toaster position="top-center" />
+  </SidebarProvider>
   );
 }
 

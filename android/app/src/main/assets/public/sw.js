@@ -79,30 +79,150 @@ define(['./workbox-ca84f546'], (function (workbox) { 'use strict';
    */
   workbox.precacheAndRoute([{
     "url": "index.html",
-    "revision": "ee76b90489d6f4781badcffa310449b7"
+    "revision": "b48b5f412db75409ed157253c3c0fcf3"
   }, {
     "url": "assets/workbox-window.prod.es5-BIl4cyR9.js",
     "revision": null
   }, {
-    "url": "assets/vendor-ui-C4o0ac4o.js",
+    "url": "assets/vendor-ui-vjrLvEGV.js",
     "revision": null
   }, {
-    "url": "assets/vendor-react-D51MxVwx.js",
+    "url": "assets/vendor-react-CWzAdjiE.js",
     "revision": null
   }, {
-    "url": "assets/vendor-firebase-D7dJIGTQ.js",
+    "url": "assets/vendor-firebase-Ckoi0oR6.js",
     "revision": null
   }, {
-    "url": "assets/vendor-db-Dl6S_SvL.js",
+    "url": "assets/vendor-db-qlHQlgqb.js",
     "revision": null
   }, {
-    "url": "assets/vendor-charts-DAQNCI3n.js",
+    "url": "assets/vendor-charts-QSlfisd8.js",
     "revision": null
   }, {
-    "url": "assets/index-DqALSLMU.css",
+    "url": "assets/useCompositeListItem-6udQbvd2.js",
     "revision": null
   }, {
-    "url": "assets/index-BUHlsQNv.js",
+    "url": "assets/textarea-DEcwS0tg.js",
+    "revision": null
+  }, {
+    "url": "assets/tabs-DPC-rQmk.js",
+    "revision": null
+  }, {
+    "url": "assets/table-CFSldpB0.js",
+    "revision": null
+  }, {
+    "url": "assets/select-CYoEjsSY.js",
+    "revision": null
+  }, {
+    "url": "assets/scroll-area-DuUc7V_J.js",
+    "revision": null
+  }, {
+    "url": "assets/react-barcode-DySeKCT-.js",
+    "revision": null
+  }, {
+    "url": "assets/purify.es-B5CD4DQe.js",
+    "revision": null
+  }, {
+    "url": "assets/proxy-DvVkfIQP.js",
+    "revision": null
+  }, {
+    "url": "assets/label-Bed42atz.js",
+    "revision": null
+  }, {
+    "url": "assets/index.es-DnQM7aJ4.js",
+    "revision": null
+  }, {
+    "url": "assets/index-DnUOZMs8.js",
+    "revision": null
+  }, {
+    "url": "assets/index-Bks6-1Rf.css",
+    "revision": null
+  }, {
+    "url": "assets/html2canvas.esm-QH1iLAAe.js",
+    "revision": null
+  }, {
+    "url": "assets/dialog-DZ0kzDgf.js",
+    "revision": null
+  }, {
+    "url": "assets/dateUtils-ZG2AB3Sa.js",
+    "revision": null
+  }, {
+    "url": "assets/constants-3JJP6fUD.js",
+    "revision": null
+  }, {
+    "url": "assets/card-CfyCm5FT.js",
+    "revision": null
+  }, {
+    "url": "assets/badge-Dg0Wr9OW.js",
+    "revision": null
+  }, {
+    "url": "assets/audit-BJrWzGUH.js",
+    "revision": null
+  }, {
+    "url": "assets/Settings-DroOG8Ue.js",
+    "revision": null
+  }, {
+    "url": "assets/Services-BRDoyue6.js",
+    "revision": null
+  }, {
+    "url": "assets/Reports-D3EpOe23.js",
+    "revision": null
+  }, {
+    "url": "assets/Records-DqOvzt5E.js",
+    "revision": null
+  }, {
+    "url": "assets/Radiology-Cjd3K3Np.js",
+    "revision": null
+  }, {
+    "url": "assets/Profile-B6A82TOR.js",
+    "revision": null
+  }, {
+    "url": "assets/Pharmacy-DB7tt7FL.js",
+    "revision": null
+  }, {
+    "url": "assets/Patients-Df69R-Lo.js",
+    "revision": null
+  }, {
+    "url": "assets/Messages-DiGsB7yZ.js",
+    "revision": null
+  }, {
+    "url": "assets/Login-BZR1OdHt.js",
+    "revision": null
+  }, {
+    "url": "assets/Lab-DyP67U46.js",
+    "revision": null
+  }, {
+    "url": "assets/HR-DCz1f77I.js",
+    "revision": null
+  }, {
+    "url": "assets/Doctors-vy_dL8_Y.js",
+    "revision": null
+  }, {
+    "url": "assets/Dashboard-DgX-1fsY.js",
+    "revision": null
+  }, {
+    "url": "assets/Dashboard-CU_l8foJ.js",
+    "revision": null
+  }, {
+    "url": "assets/Clinic-Clp3ptq5.js",
+    "revision": null
+  }, {
+    "url": "assets/CSPContext-ON1TvfDk.js",
+    "revision": null
+  }, {
+    "url": "assets/Billing-CVSiv1Nn.js",
+    "revision": null
+  }, {
+    "url": "assets/BarcodeScanner-CGN1ZdWO.js",
+    "revision": null
+  }, {
+    "url": "assets/AuditLogs-PvO-VKt2.js",
+    "revision": null
+  }, {
+    "url": "assets/Appointments-CHox9b_V.js",
+    "revision": null
+  }, {
+    "url": "assets/Appointments-C2QOK-uK.js",
     "revision": null
   }, {
     "url": "manifest.webmanifest",

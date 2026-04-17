@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, onSnapshot, where, orderBy, addDoc, serverTimestamp, updateDoc, doc, limit } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
+import { toDate } from '@/src/lib/dateUtils';
 import { useAuth } from '@/src/context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -146,7 +147,7 @@ export default function PatientMessages() {
                       <div className={`max-w-[80%] p-3 rounded-2xl shadow-sm ${isMe ? 'bg-primary text-primary-foreground rounded-tr-none' : 'bg-slate-100 text-foreground rounded-tl-none'}`}>
                         <p className="text-sm leading-relaxed">{msg.content}</p>
                         <div className={`flex items-center gap-1 mt-1 text-[0.65rem] ${isMe ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                          <span>{msg.createdAt?.toDate().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span>{toDate(msg.createdAt).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</span>
                           {isMe && (msg.read ? <CheckCheck size={12} /> : <Check size={12} />)}
                         </div>
                       </div>

@@ -6,10 +6,10 @@ import {
   onSnapshot, 
   orderBy, 
   addDoc, 
-  serverTimestamp, 
-  Timestamp 
+  serverTimestamp
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
+import { formatArabicDate, toDate } from '@/src/lib/dateUtils';
 import { Patient, MedicalRecord, Appointment, Prescription, LabRequest, RadiologyRequest } from '@/src/types';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -126,7 +126,7 @@ export default function MedicalRecordView({ patient, onClose }: MedicalRecordVie
   const vitalsData = records
     .filter(r => r.vitals)
     .map(r => ({
-      date: r.createdAt instanceof Timestamp ? r.createdAt.toDate().toLocaleDateString('ar-SA') : '',
+      date: formatArabicDate(r.createdAt),
       temp: r.vitals?.temperature,
       heart: r.vitals?.heartRate,
       weight: r.vitals?.weight
@@ -236,7 +236,7 @@ export default function MedicalRecordView({ patient, onClose }: MedicalRecordVie
                       <div className="space-y-3 flex-1">
                         <div className="flex items-center gap-3">
                             <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded uppercase flex items-center gap-1">
-                                <Clock size={12} /> {record.createdAt instanceof Timestamp ? record.createdAt.toDate().toLocaleDateString('ar-SA') : ''}
+                                <Clock size={12} /> {formatArabicDate(record.createdAt)}
                             </span>
                             <span className="text-primary font-bold text-sm">د. {record.doctorId.substring(0, 8)}</span>
                         </div>
@@ -291,8 +291,8 @@ export default function MedicalRecordView({ patient, onClose }: MedicalRecordVie
                    <CardDescription>رسم بياني لتاريخ الحرارة والنبض والوزن</CardDescription>
                  </CardHeader>
                  <CardContent>
-                    <div className="h-[300px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
+                    <div className="h-[300px] w-full min-h-[300px] relative">
+                        <ResponsiveContainer width="100%" height="100%" minHeight={300} minWidth={0}>
                             <LineChart data={vitalsData}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                 <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
@@ -314,7 +314,7 @@ export default function MedicalRecordView({ patient, onClose }: MedicalRecordVie
                 <Card key={p.id}>
                   <CardContent className="p-4 flex justify-between items-center">
                     <div>
-                      <p className="font-bold flex items-center gap-2"><Pill size={16} className="text-primary" /> {p.createdAt instanceof Timestamp ? p.createdAt.toDate().toLocaleDateString('ar-SA') : ''}</p>
+                      <p className="font-bold flex items-center gap-2"><Pill size={16} className="text-primary" /> {formatArabicDate(p.createdAt)}</p>
                       <ul className="text-sm text-slate-500 mt-2">
                         {p.medications.map((m, i) => <li key={i}>{m.name} - {m.dosage} ({m.frequency})</li>)}
                       </ul>
@@ -343,7 +343,7 @@ export default function MedicalRecordView({ patient, onClose }: MedicalRecordVie
                         <Calendar size={18} />
                       </div>
                       <div>
-                        <p className="font-bold">{app.date instanceof Timestamp ? app.date.toDate().toLocaleDateString('ar-SA') : ''} • {app.startTime}</p>
+                        <p className="font-bold">{formatArabicDate(app.date)} • {app.startTime}</p>
                         <p className="text-xs text-slate-500">مع د. {app.doctorName}</p>
                       </div>
                     </div>

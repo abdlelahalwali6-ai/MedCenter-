@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, orderBy, updateDoc, deleteDoc, doc, serverTimestamp, addDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
+import { formatArabicDate } from '@/src/lib/dateUtils';
 import { logAction } from '@/src/lib/audit';
 import { RadiologyRequest, Patient } from '@/src/types';
 import { Button } from '@/components/ui/button';
@@ -291,7 +292,7 @@ export default function Radiology() {
                     <TableCell className="font-bold">{req.patientName}</TableCell>
                     <TableCell>{req.type}</TableCell>
                     <TableCell>{req.doctorName}</TableCell>
-                    <TableCell>{req.createdAt?.toDate().toLocaleDateString('ar-SA')}</TableCell>
+                    <TableCell>{formatArabicDate(req.createdAt)}</TableCell>
                     <TableCell>
                       <span className={`px-2 py-1 rounded text-[0.7rem] font-bold ${
                         req.status === 'completed' ? 'bg-success/10 text-success' : 

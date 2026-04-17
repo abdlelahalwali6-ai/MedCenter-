@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, where, orderBy, Timestamp, addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
+import { toDate } from '@/src/lib/dateUtils';
 import { useAuth } from '@/src/context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -196,8 +197,8 @@ export default function PatientAppointments() {
                 <div className="flex flex-col md:flex-row">
                   <div className="bg-slate-50 p-6 flex flex-col items-center justify-center border-l md:w-48">
                     <CalendarIcon className="text-primary mb-2" size={24} />
-                    <span className="font-bold text-lg">{app.date?.toDate().toLocaleDateString('ar-SA', { day: 'numeric', month: 'short' })}</span>
-                    <span className="text-xs text-muted-foreground">{app.date?.toDate().getFullYear()}</span>
+                    <span className="font-bold text-lg">{toDate(app.date).toLocaleDateString('ar-SA', { day: 'numeric', month: 'short' })}</span>
+                    <span className="text-xs text-muted-foreground">{toDate(app.date).getFullYear()}</span>
                   </div>
                   <div className="flex-1 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="space-y-1">

@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { collection, query, onSnapshot, orderBy, updateDoc, deleteDoc, doc, serverTimestamp, addDoc, getDocs, getDoc, setDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
+import { formatArabicDate, toDate } from '@/src/lib/dateUtils';
 import { logAction } from '@/src/lib/audit';
 import { LabRequest, LabTest, Patient, LabCatalogItem } from '@/src/types';
 import { localDB } from '@/src/lib/db';
@@ -375,7 +376,7 @@ export default function Lab() {
               </div>
             </TableCell>
             <TableCell className="text-secondary">{req.doctorName}</TableCell>
-            <TableCell className="text-secondary text-xs">{req.createdAt?.toDate().toLocaleDateString('ar-SA')}</TableCell>
+            <TableCell className="text-secondary text-xs">{formatArabicDate(req.createdAt)}</TableCell>
             <TableCell>
               <span className={`px-2 py-1 rounded text-[0.7rem] font-bold flex items-center gap-1 w-fit ${
                 req.status === 'completed' ? 'bg-success/10 text-success' : 
