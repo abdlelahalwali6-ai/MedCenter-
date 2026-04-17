@@ -3,9 +3,21 @@ import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { localDB } from '@/src/lib/db';
 import { Patient, InventoryItem, LabRequest } from '@/src/types';
+import { processSyncOutbox } from '@/src/lib/syncService';
 
 export function useSync() {
   useEffect(() => {
+    // Process outbox on mount and when coming online
+    processSyncOutbox();
+    
+    const handleOnline = () => {
+      console.log('App is online, processing outbox...');
+      processSyncOutbox();
+    };
+
+    window.addEventListener('online', handleOnline);
+
+    // 1. Sync Patients
     // 1. Sync Patients
     const unsubPatients = onSnapshot(query(collection(db, 'patients'), orderBy('createdAt', 'desc')), (snap) => {
       const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Patient[];
@@ -25,6 +37,7 @@ export function useSync() {
     });
 
     return () => {
+      window.removeEventListener('online', handleOnline);
       unsubPatients();
       unsubInventory();
       unsubLab();
