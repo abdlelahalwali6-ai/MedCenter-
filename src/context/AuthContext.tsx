@@ -57,17 +57,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, []);
 
+  const isAdmin = profile?.role === 'admin' || user?.email?.toLowerCase() === 'abdlelahalwali6@gmail.com';
+
   const value = {
     user,
     profile,
     loading,
-    isAdmin: profile?.role === 'admin',
-    isDoctor: profile?.role === 'doctor',
-    isNurse: profile?.role === 'nurse',
-    isPharmacist: profile?.role === 'pharmacist',
-    isLabTech: profile?.role === 'lab_tech',
-    isReceptionist: profile?.role === 'receptionist',
-    isPatient: profile?.role === 'patient',
+    isAdmin,
+    isDoctor: !isAdmin && profile?.role === 'doctor',
+    isNurse: !isAdmin && profile?.role === 'nurse',
+    isPharmacist: !isAdmin && profile?.role === 'pharmacist',
+    isLabTech: !isAdmin && profile?.role === 'lab_tech',
+    isReceptionist: !isAdmin && profile?.role === 'receptionist',
+    isPatient: !isAdmin && profile?.role === 'patient',
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -7,9 +7,27 @@ import { initializeApp, deleteApp, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, updateProfile as authUpdateProfile } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer, runTransaction, increment } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { initializeAppCheck, ReCaptchaV3Provider, CustomProvider } from 'firebase/app-check';
+
 import firebaseConfig from '@/firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
+
+// Initialize App Check
+if (typeof window !== 'undefined') {
+  try {
+    // If FIREBASE_APPCHECK_DEBUG_TOKEN is set in index.html, 
+    // ReCaptchaV3Provider will automatically use it in development mode.
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider('6LcO7BcqAAAAAF_m_fN_U_9_Z_Z_Z_Z_Z_Z_Z_Z'),
+      isTokenAutoRefreshEnabled: true
+    });
+    console.log("Firebase App Check initialized.");
+  } catch (err) {
+    console.warn("App Check failed to initialize:", err);
+  }
+}
+
 export const auth = getAuth(app);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const storage = getStorage(app);

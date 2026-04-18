@@ -27,7 +27,8 @@ const SYNC_COLLECTIONS = [
   { name: 'auditLogs', firestoreName: 'audit_logs', roles: ['admin', 'doctor', 'receptionist'] },
   { name: 'serviceRequests', firestoreName: 'service_requests', patientFilter: 'patientId' },
   { name: 'serviceCatalog', firestoreName: 'services_catalog' },
-  { name: 'labCatalog', firestoreName: 'lab_catalog' }
+  { name: 'labCatalog', firestoreName: 'lab_catalog' },
+  { name: 'profiles', firestoreName: 'users', roles: ['admin'] } // Only admins can see all profiles locally
 ];
 
 export class SyncService {
@@ -37,23 +38,28 @@ export class SyncService {
     if (this.isSyncing) return;
     if (!auth.currentUser) return;
 
+    // Default to 'patient' role if missing to ensure secure filtering during initial profile load Race Condition
+    // If we don't know the role, we MUST assume 'patient' to apply necessary where filters
+    const effectiveRole = userRole || 'patient';
+    const effectiveUserId = userId || auth.currentUser.uid;
+
     this.isSyncing = true;
     const start = Date.now();
     
     try {
       // 1. First sync deletions (to clean up Firestore)
-      await this.syncDeletions();
+      await this.syncDeletions().catch(e => console.error("[Sync] syncDeletions failed:", e));
 
       for (const col of SYNC_COLLECTIONS as any[]) {
         try {
           // If a collection has specific roles, verify permission before syncing
           if (col.roles) {
-            if (!userRole || !col.roles.includes(userRole)) {
-              console.log(`[Sync] Skipping collection ${col.name}: userRole ${userRole || 'missing'} is not authorized.`);
+            if (!effectiveRole || !col.roles.includes(effectiveRole)) {
+              console.log(`[Sync] Skipping collection ${col.name}: effectiveRole ${effectiveRole} is not authorized.`);
               continue;
             }
           }
-          await this.syncCollection(col.name, col.firestoreName, userRole, userId, col.patientFilter);
+          await this.syncCollection(col.name, col.firestoreName, effectiveRole, effectiveUserId, col.patientFilter);
         } catch (error) {
           console.error(`[Sync] Failed to sync collection ${col.name}:`, error);
           // Continue with next collection
@@ -74,18 +80,25 @@ export class SyncService {
     if (deleted.length === 0) return;
 
     console.log(`[Sync] Processing ${deleted.length} remote deletions`);
-    const writeBatchObj = writeBatch(db);
     
+    // Process deletions individually to avoid one fail blocking others
     for (const item of deleted) {
       const col = SYNC_COLLECTIONS.find(c => c.name === item.collectionName);
       if (col) {
-        const docRef = doc(db, col.firestoreName, item.id);
-        writeBatchObj.delete(docRef);
+        try {
+          const docRef = doc(db, col.firestoreName, item.id);
+          await writeBatch(db).delete(docRef).commit(); // Using single-doc transaction-like commit
+          await localDB.deletedItems.delete(item.id);
+        } catch (error) {
+          console.error(`[Sync] Failed to delete ${item.id} from ${item.collectionName}:`, error);
+          // If permission denied, we might want to clear it anyway to stop annoying errors,
+          // but better to keep it if it's a temporary network error.
+          if (error instanceof Error && error.message.includes('permission')) {
+             await localDB.deletedItems.delete(item.id); // Clear if we definitely don't have permission
+          }
+        }
       }
     }
-
-    await writeBatchObj.commit();
-    await localDB.deletedItems.clear();
   }
 
   private static async syncCollection(localName: string, firestoreName: string, userRole?: string, userId?: string, patientFilter?: string) {

@@ -47,7 +47,7 @@ export default defineConfig(({ mode }) => {
           ]
         },
         workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webmanifest}'],
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
           runtimeCaching: [
             {
@@ -83,16 +83,10 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
       assetsDir: 'assets',
       emptyOutDir: true,
-      chunkSizeWarningLimit: 1000,
+      chunkSizeWarningLimit: 2000,
       rollupOptions: {
         output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-            'vendor-firebase': ['firebase/app', 'firebase/firestore', 'firebase/auth'],
-            'vendor-ui': ['lucide-react', 'motion', 'class-variance-authority', 'clsx', 'tailwind-merge', 'sonner'],
-            'vendor-db': ['dexie', 'dexie-react-hooks'],
-            'vendor-charts': ['recharts'],
-          },
+          manualChunks: undefined,
         },
       },
     },

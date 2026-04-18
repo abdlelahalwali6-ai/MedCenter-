@@ -79,9 +79,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export default function Patients() {
-  const { profile, isAdmin } = useAuth();
+  const { profile, isAdmin, isPatient } = useAuth();
 
-  if (profile?.role === 'patient') return null;
+  if (isPatient) return null;
 
   const patients = useLiveQuery(() => localDB.patients.reverse().toArray(), []) || [];
   const [searchTerm, setSearchTerm] = useState('');

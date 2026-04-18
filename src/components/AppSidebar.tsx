@@ -52,12 +52,28 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 export function AppSidebar() {
-  const { profile } = useAuth();
+  const { profile, isAdmin, isDoctor, isNurse, isPharmacist, isLabTech, isReceptionist, isPatient } = useAuth();
   const location = useLocation();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === 'collapsed';
   
   const [sidebarSearch, setSidebarSearch] = useState('');
+
+  // Helper to determine if a user has one of the required roles
+  const hasRole = (roles: string[]) => {
+    if (isAdmin && roles.includes('admin')) return true;
+    if (isDoctor && roles.includes('doctor')) return true;
+    if (isNurse && roles.includes('nurse')) return true;
+    if (isPharmacist && roles.includes('pharmacist')) return true;
+    if (isLabTech && roles.includes('lab_tech')) return true;
+    if (isReceptionist && roles.includes('receptionist')) return true;
+    if (isPatient && roles.includes('patient')) return true;
+    
+    // Fallback to profile.role if flags aren't enough (e.g. for 'radiologist')
+    if (profile?.role && roles.includes(profile.role)) return true;
+    
+    return false;
+  };
 
   const mainItems = [
     { title: 'لوحة التحكم', icon: LayoutDashboard, url: '/', roles: ['admin', 'doctor', 'nurse', 'pharmacist', 'lab_tech', 'receptionist'] },
@@ -101,7 +117,7 @@ export function AppSidebar() {
   ];
 
   const filterItems = (items: any[]) => items.filter(item => {
-    const roleMatch = profile?.role && item.roles.includes(profile.role);
+    const roleMatch = hasRole(item.roles);
     const searchMatch = !sidebarSearch || item.title.includes(sidebarSearch);
     return roleMatch && searchMatch;
   });
@@ -148,7 +164,7 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="py-2 gap-0 px-2 no-scrollbar">
-        {profile?.role !== 'patient' ? (
+        {!isPatient ? (
           <>
             <SidebarGroup className="py-2">
               <SidebarGroupLabel className="px-3 text-[0.6rem] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 group-data-[collapsible=icon]:hidden">الاختصارات</SidebarGroupLabel>

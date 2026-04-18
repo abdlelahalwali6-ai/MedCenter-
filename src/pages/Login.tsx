@@ -16,6 +16,7 @@ import {
   doc, 
   getDoc, 
   setDoc, 
+  updateDoc,
   serverTimestamp,
   getDocFromServer,
   collection,
@@ -56,10 +57,13 @@ export default function Login() {
   useEffect(() => {
     async function testConnection() {
       try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration.");
+        // Use a path that we explicitly allowed in firestore.rules
+        await getDocFromServer(doc(db, '_connection_test_', 'ping'));
+        console.log("Firestore connection verified.");
+      } catch (error: any) {
+        console.warn("Connection test result:", error.code || error.message);
+        // We only care if the error is "offline"
+        if (error.message?.includes('offline') || error.code === 'unavailable') {
           setConnectionError(true);
         }
       }
@@ -121,13 +125,28 @@ export default function Login() {
       }
 
       await signInWithEmailAndPassword(auth, email, loginPassword);
+      
+      // Force role update for admin just in case
+      if (email.toLowerCase() === 'abdlelahalwali6@gmail.com') {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          const docRef = doc(db, 'users', currentUser.uid);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists() && docSnap.data().role !== 'admin') {
+            await updateDoc(docRef, { role: 'admin' });
+          }
+        }
+      }
+
       toast.success("تم تسجيل الدخول بنجاح");
     } catch (err: any) {
       console.error("Login Error:", err);
       if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
         setError("بيانات الدخول غير صحيحة");
+      } else if (err.code === 'auth/firebase-app-check-token-is-invalid') {
+        setError("خطأ في نظام الحماية (App Check). يرجى التأكد من أنك لا تستخدم 'VPN' أو إضافات تمنع التحقق، أو قم بتعطيل 'Enforcement' في لوحة تحكم Firebase.");
       } else {
-        setError(err.message || "حدث خطأ أثناء تسجيل الدخول");
+        setError("حدث خطأ أثناء تسجيل الدخول. يرجى التأكد من استقرار الاتصال.");
       }
     } finally {
       setLoading(false);
@@ -158,7 +177,7 @@ export default function Login() {
       // Create profile in Firestore
       const docRef = doc(db, 'users', user.uid);
       
-      const isAdminEmail = signupEmail === 'abdlelahalwali6@gmail.com';
+      const isAdminEmail = signupEmail.toLowerCase() === 'abdlelahalwali6@gmail.com';
 
       const newProfile: UserProfile = {
         uid: user.uid,
@@ -177,8 +196,10 @@ export default function Login() {
         setError("البريد الإلكتروني مستخدم بالفعل");
       } else if (err.code === 'auth/weak-password') {
         setError("كلمة المرور ضعيفة جداً");
+      } else if (err.code === 'auth/firebase-app-check-token-is-invalid') {
+        setError("خطأ في نظام الحماية (App Check). يرجى التأكد من عدم وجود إضافات تمنع الاتصال بـ Firebase أو تواصل مع الدعم.");
       } else {
-        setError("حدث خطأ أثناء إنشاء الحساب");
+        setError("حدث خطأ أثناء إنشاء الحساب. تأكد من استقرار الاتصال بالإنترنت.");
       }
     } finally {
       setLoading(false);
@@ -211,6 +232,7 @@ export default function Login() {
     setLoading(true);
     setError(null);
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
     
     try {
       const result = await signInWithPopup(auth, provider);
@@ -218,30 +240,39 @@ export default function Login() {
       
       const docRef = doc(db, 'users', user.uid);
       const docSnap = await getDoc(docRef);
+      const isAdminEmail = (user.email || '').toLowerCase() === 'abdlelahalwali6@gmail.com';
       
       if (!docSnap.exists()) {
-        const isAdminEmail = user.email === 'abdlelahalwali6@gmail.com';
-        
-        const newProfile: UserProfile = {
+        const newProfile: any = {
           uid: user.uid,
           email: user.email || '',
           displayName: user.displayName || 'مستخدم جديد',
           role: isAdminEmail ? 'admin' : 'patient',
-          photoURL: user.photoURL || undefined,
           createdAt: serverTimestamp(),
         };
+
+        if (user.photoURL) newProfile.photoURL = user.photoURL;
+        if (user.phoneNumber) newProfile.phoneNumber = user.phoneNumber;
         
         await setDoc(docRef, newProfile);
+      } else if (isAdminEmail && docSnap.data()?.role !== 'admin') {
+        // Correct the role if the admin accidentally has a different role
+        await updateDoc(docRef, { role: 'admin' });
       }
       toast.success("تم تسجيل الدخول بنجاح");
     } catch (err: any) {
       console.error("Google Login Error:", err);
       if (err.code === 'auth/popup-closed-by-user') {
-        toast.info("تم إغلاق نافذة تسجيل الدخول قبل إتمام العملية.");
+        toast.error("تم إغلاق نافذة تسجيل الدخول. إذا كنت تستخدم المعاينة، جرب فتح التطبيق في نافذة مستقلة.");
+        setError("تعذر إكمال تسجيل الدخول لأن النافذة أُغلقت. يرجى التأكد من السماح بالنوافذ المنبثقة.");
       } else if (err.code === 'auth/operation-not-allowed') {
         setError("يرجى تفعيل تسجيل الدخول بواسطة جوجل في لوحة تحكم Firebase.");
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError(`هذا النطاق (${window.location.hostname}) غير مضاف في قائمة النطاقات المصرح بها في Firebase Console.`);
+      } else if (err.code === 'auth/firebase-app-check-token-is-invalid') {
+        setError("فشل التحقق من أمان التطبيق (App Check). يرجى المحاولة من متصفح آخر أو تعطيل مانع الإعلانات.");
       } else {
-        setError("حدث خطأ أثناء تسجيل الدخول عبر جوجل. قد يكون السبب حظر النوافذ المنبثقة أو عدم إضافة نطاق الموقع في Firebase Console.");
+        setError("حدث خطأ أثناء تسجيل الدخول عبر جوجل. تأكد من السماح بالنوافذ المنبثقة وإضافة نطاق الموقع في Firebase Console (Authorized Domains).");
       }
     } finally {
       setLoading(false);

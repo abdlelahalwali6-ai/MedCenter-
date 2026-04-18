@@ -67,9 +67,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function Appointments() {
-  const { profile, isAdmin } = useAuth();
+  const { profile, isAdmin, isPatient } = useAuth();
 
-  if (profile?.role === 'patient') return null;
+  if (isPatient) return null;
 
   const appointments = useLiveQuery(() => localDB.appointments.toArray(), []) || [];
   const patients = useLiveQuery(() => localDB.patients.toArray(), []) || [];

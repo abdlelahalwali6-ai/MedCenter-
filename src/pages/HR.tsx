@@ -36,9 +36,9 @@ import {
 import { Label } from '@/components/ui/label';
 
 export default function HR() {
-  const { profile: currentUserProfile, isAdmin } = useAuth();
+  const { profile: currentUserProfile, isAdmin, isPatient } = useAuth();
 
-  if (currentUserProfile?.role === 'patient') return null;
+  if (isPatient) return null;
 
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -57,7 +57,7 @@ export default function HR() {
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
 
   useEffect(() => {
-    if (currentUserProfile?.role !== 'admin') return;
+    if (!isAdmin) return;
 
     const q = query(collection(db, 'users'), orderBy('displayName', 'asc'));
     const unsub = onSnapshot(q, (snapshot) => {

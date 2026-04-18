@@ -1,4 +1,4 @@
-import { collection, addDoc, serverTimestamp, getDocs, query, limit } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDocs, query, limit, setDoc, doc, where } from 'firebase/firestore';
 import { db } from './firebase';
 
 const yemenMedications = [
@@ -39,6 +39,63 @@ const yemenServices = [
   { name: 'قياس ضغط الدم', category: 'General', price: 200, description: 'قياس ضغط الدم الشرياني' },
   { name: 'تخطيط قلب (ECG)', category: 'General', price: 5000, description: 'عمل رسم قلب كهربائي' }
 ];
+
+const yemenDoctors = [
+  {
+    displayName: 'د. أحمد الوالي',
+    email: 'dr.ahmed@medcare.ye',
+    role: 'doctor',
+    specialization: 'العيادة العامة',
+    consultationFee: 3000,
+    freeFollowUps: 1,
+    availableDays: ['Saturday', 'Monday', 'Wednesday'],
+    workingHours: { start: '08:00', end: '14:00' }
+  },
+  {
+    displayName: 'د. مريم الصبري',
+    email: 'dr.mariam@medcare.ye',
+    role: 'doctor',
+    specialization: 'طب الأطفال',
+    consultationFee: 4000,
+    freeFollowUps: 1,
+    availableDays: ['Sunday', 'Tuesday', 'Thursday'],
+    workingHours: { start: '09:00', end: '15:00' }
+  },
+  {
+    displayName: 'د. فؤاد عقلان',
+    email: 'dr.fouad@medcare.ye',
+    role: 'doctor',
+    specialization: 'الأسنان',
+    consultationFee: 5000,
+    freeFollowUps: 0,
+    availableDays: ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday'],
+    workingHours: { start: '16:00', end: '21:00' }
+  }
+];
+
+export async function seedDoctors() {
+  try {
+    const usersRef = collection(db, 'users');
+    const existing = await getDocs(query(usersRef, where('role', '==', 'doctor'), limit(1)));
+    
+    if (existing.empty) {
+      console.log('Seeding Sample Yemen Doctors...');
+      for (const doctor of yemenDoctors) {
+        // We create Firestore profiles. Note: These won't have actual Auth accounts
+        // but it's enough for the Admin to see them in management views.
+        const tempId = 'demo-dr-' + Math.random().toString(36).substring(7);
+        await setDoc(doc(db, 'users', tempId), {
+          ...doctor,
+          uid: tempId,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error seeding doctors:', error);
+  }
+}
 
 export async function seedPharmacyAndRadiology() {
   try {

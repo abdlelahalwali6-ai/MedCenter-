@@ -12,7 +12,8 @@ import {
   AuditLog, 
   ServiceCatalogItem, 
   LabCatalogItem,
-  ServiceRequest 
+  ServiceRequest,
+  UserProfile
 } from '@/src/types';
 
 export class LocalDB extends Dexie {
@@ -32,10 +33,11 @@ export class LocalDB extends Dexie {
   syncMetaData!: Table<{ id: string; lastSynced: number }>;
   counters!: Table<{ id: string; value: number }>;
   deletedItems!: Table<{ id: string; collectionName: string; deletedAt: number }>;
+  profiles!: Table<UserProfile>;
   
   constructor() {
     super('HospitalLocalDB');
-    this.version(2).stores({
+    this.version(3).stores({
       patients: 'id, name, phone, mrn',
       inventory: 'id, name, scientificName, barcode',
       labRequests: 'id, patientId, status',
@@ -51,8 +53,33 @@ export class LocalDB extends Dexie {
       serviceRequests: 'id, patientId, status',
       syncMetaData: 'id',
       counters: 'id',
-      deletedItems: 'id, collectionName'
+      deletedItems: 'id, collectionName',
+      profiles: 'uid, email, role'
     });
+    
+    // Ensure admin stub exists locally to help with initial identification
+    this.ensureLocalAdmin();
+  }
+
+  private async ensureLocalAdmin() {
+    try {
+      const adminEmail = 'abdlelahalwali6@gmail.com';
+      const existing = await this.profiles.where('email').equalsIgnoreCase(adminEmail).first();
+      
+      if (!existing) {
+        // We use a temporary UID if we don't have one, but it will be updated during first sync/login
+        await this.profiles.add({
+          uid: 'admin-initial-uid', 
+          email: adminEmail,
+          displayName: 'مسؤول النظام (أمان)',
+          role: 'admin',
+          createdAt: Date.now()
+        });
+        console.log("Local admin stub seeded.");
+      }
+    } catch (e) {
+      console.error("Error seeding local admin:", e);
+    }
   }
 }
 

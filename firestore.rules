@@ -7,27 +7,36 @@ service cloud.firestore {
     // ===============================================================
     
     function isSignedIn() { return request.auth != null; }
+    
+    // Cache the user document to avoid multiple lookups
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // Check if user is an admin
     function isAdmin() { 
       return isSignedIn() && (
-        request.auth.token.email == "abdlelahalwali6@gmail.com" ||
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+        request.auth.token.email.toLowerCase() == "abdlelahalwali6@gmail.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         getUserData().role == "admin")
       );
     }
     
+    // Check if user is a staff member
     function isStaff() {
       return isSignedIn() && (
         isAdmin() || 
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['doctor', 'nurse', 'pharmacist', 'lab_tech', 'receptionist', 'radiologist'])
+         getUserData().role in ['doctor', 'nurse', 'pharmacist', 'lab_tech', 'receptionist', 'radiologist'])
       );
     }
 
+    // Check if the document belongs to the signed-in patient
     function isOwner(patientId) {
       return isSignedIn() && (
         request.auth.uid == patientId ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.patientId == patientId)
+         getUserData().patientId == patientId)
       );
     }
 
@@ -45,19 +54,32 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Connectivity test path
+    match /_connection_test_/ping {
+      allow read, write: if true;
+    }
+
     // ===============================================================
     // COLLECTION RULES
     // ===============================================================
 
     match /users/{uid} {
       // Allow unauthenticated lookup for login (name/phone to email resolution)
-      // We restrict list to a single document for unauthenticated users
       allow list: if isStaff() || (!isSignedIn() && request.query.limit <= 1);
-      // Only the user themselves or staff can get the full profile
       allow get: if isSignedIn() && (request.auth.uid == uid || isStaff());
       
-      allow create: if isSignedIn() && (isAdmin() || (uid == request.auth.uid && incoming().role == 'patient'));
-      allow update: if isSignedIn() && (isAdmin() || uid == request.auth.uid);
+      allow create: if isSignedIn() && (
+        isAdmin() || 
+        (uid == request.auth.uid && incoming().role == 'patient' && 
+         incoming().keys().hasAll(['uid', 'email', 'role', 'createdAt']) && 
+         incoming().uid == request.auth.uid)
+      );
+      
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        (uid == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'phoneNumber']))
+      );
+      
       allow delete: if isAdmin();
     }
 
@@ -83,54 +105,62 @@ service cloud.firestore {
     }
 
     match /lab_requests/{id} {
-      allow read: if isStaff() || (isSignedIn() && existing().patientId == request.auth.uid);
+      allow list: if isStaff() || (isSignedIn() && resource.data.patientId == request.auth.uid);
+      allow get: if isStaff() || (isSignedIn() && existing().patientId == request.auth.uid);
       allow create, update: if isStaff();
       allow delete: if isAdmin();
     }
 
     match /radiology_requests/{id} {
-      allow read: if isStaff() || (isSignedIn() && existing().patientId == request.auth.uid);
+      allow list: if isStaff() || (isSignedIn() && resource.data.patientId == request.auth.uid);
+      allow get: if isStaff() || (isSignedIn() && existing().patientId == request.auth.uid);
       allow create, update: if isStaff();
       allow delete: if isAdmin();
     }
 
     match /prescriptions/{id} {
-      allow read: if isStaff() || (isSignedIn() && existing().patientId == request.auth.uid);
+      allow list: if isStaff() || (isSignedIn() && resource.data.patientId == request.auth.uid);
+      allow get: if isStaff() || (isSignedIn() && existing().patientId == request.auth.uid);
       allow create, update: if isStaff();
       allow delete: if isAdmin();
     }
 
     match /appointments/{id} {
-      allow read: if isStaff() || (isSignedIn() && (existing().patientId == request.auth.uid || existing().doctorId == request.auth.uid));
+      allow list: if isStaff() || (isSignedIn() && (resource.data.patientId == request.auth.uid || resource.data.doctorId == request.auth.uid));
+      allow get: if isStaff() || (isSignedIn() && (existing().patientId == request.auth.uid || existing().doctorId == request.auth.uid));
       allow create, update: if isStaff() || (isSignedIn() && incoming().patientId == request.auth.uid);
       allow delete: if isAdmin();
     }
 
     match /medical_records/{id} {
-      allow read: if isStaff() || (isSignedIn() && existing().patientId == request.auth.uid);
+      allow list: if isStaff() || (isSignedIn() && resource.data.patientId == request.auth.uid);
+      allow get: if isStaff() || (isSignedIn() && existing().patientId == request.auth.uid);
       allow create, update: if isStaff();
       allow delete: if isAdmin();
     }
 
     match /bills/{id} {
-      allow read: if isStaff() || (isSignedIn() && existing().patientId == request.auth.uid);
+      allow list: if isStaff() || (isSignedIn() && resource.data.patientId == request.auth.uid);
+      allow get: if isStaff() || (isSignedIn() && existing().patientId == request.auth.uid);
       allow create, update: if isStaff();
       allow delete: if isAdmin();
     }
 
     match /inventory/{id} {
       allow read: if isSignedIn();
-      allow write: if isAdmin() || (isStaff() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "pharmacist");
+      allow write: if isStaff(); // More inclusive for staff to update stock
     }
 
     match /messages/{id} {
-      allow read: if isStaff() || (isSignedIn() && (existing().senderId == request.auth.uid || existing().receiverId == request.auth.uid));
+      allow list: if isStaff() || (isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid));
+      allow get: if isStaff() || (isSignedIn() && (existing().senderId == request.auth.uid || existing().receiverId == request.auth.uid));
       allow create: if isSignedIn() && (!('senderId' in incoming()) || incoming().senderId == request.auth.uid);
       allow update: if isStaff() || (isSignedIn() && (existing().receiverId == request.auth.uid || existing().senderId == request.auth.uid));
     }
 
     match /service_requests/{id} {
-      allow read: if isStaff() || (isSignedIn() && existing().patientId == request.auth.uid);
+      allow list: if isStaff() || (isSignedIn() && resource.data.patientId == request.auth.uid);
+      allow get: if isStaff() || (isSignedIn() && existing().patientId == request.auth.uid);
       allow create, update: if isStaff();
       allow delete: if isAdmin();
     }

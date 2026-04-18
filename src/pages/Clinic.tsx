@@ -31,11 +31,11 @@ import { toast } from 'sonner';
 import { useAuth } from '@/src/context/AuthContext';
 
 export default function Clinic() {
-  const { profile } = useAuth();
+  const { profile, isPatient } = useAuth();
   const [searchParams] = useSearchParams();
   const patientIdFromUrl = searchParams.get('patientId');
 
-  if (profile?.role === 'patient') return null;
+  if (isPatient) return null;
 
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);

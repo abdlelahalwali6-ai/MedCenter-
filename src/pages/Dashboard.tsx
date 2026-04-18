@@ -59,10 +59,10 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 
 export default function Dashboard() {
-  const { profile } = useAuth();
+  const { profile, isPatient } = useAuth();
   const navigate = useNavigate();
 
-  if (profile?.role === 'patient') return null;
+  if (isPatient) return null;
 
   const [counts, setCounts] = useState({
     patients: 0,

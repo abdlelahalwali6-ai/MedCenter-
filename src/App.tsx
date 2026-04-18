@@ -38,7 +38,7 @@ import AppInitializer from './components/AppInitializer';
 import { useSync } from './hooks/useSync';
 
 import { seedLabCatalog } from './lib/seedLab';
-import { seedPharmacyAndRadiology } from './lib/seedData';
+import { seedPharmacyAndRadiology, seedDoctors } from './lib/seedData';
 
 const PageLoader = () => (
   <div className="flex-1 flex items-center justify-center p-12">
@@ -50,13 +50,14 @@ const PageLoader = () => (
 );
 
 function AppContent() {
-  const { user, loading, profile } = useAuth();
+  const { user, loading, profile, isPatient } = useAuth();
   useSync();
 
   React.useEffect(() => {
     if (user && profile?.role === 'admin') {
       seedLabCatalog();
       seedPharmacyAndRadiology();
+      seedDoctors();
     }
   }, [user, profile]);
 
@@ -116,7 +117,7 @@ function AppContent() {
             <div className="mx-auto w-full max-w-7xl animate-in fade-in slide-in-from-bottom-4 duration-500">
               <Suspense fallback={<PageLoader />}>
                 <Routes>
-                <Route path="/" element={profile?.role === 'patient' ? <Navigate to="/patient" replace /> : <Dashboard />} />
+                <Route path="/" element={isPatient ? <Navigate to="/patient" replace /> : <Dashboard />} />
                 <Route path="/patients" element={<Patients />} />
                 <Route path="/appointments" element={<Appointments />} />
                 <Route path="/clinic" element={<Clinic />} />

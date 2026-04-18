@@ -14,7 +14,7 @@ import { Settings as SettingsIcon, Bell, Shield, Database, Globe, Smartphone, Lo
 import { toast } from 'sonner';
 import { useAuth } from '@/src/context/AuthContext';
 import { seedLabCatalog } from '@/src/lib/seedLab';
-import { seedPharmacyAndRadiology } from '@/src/lib/seedData';
+import { seedPharmacyAndRadiology, seedDoctors } from '@/src/lib/seedData';
 import { logAction } from '@/src/lib/audit';
 
 import { 
@@ -29,9 +29,9 @@ import {
 import { requestNotificationPermission, showLocalNotification } from '@/src/lib/pushNotifications';
 
 export default function Settings() {
-  const { isAdmin, profile } = useAuth();
+  const { isAdmin, profile, isPatient } = useAuth();
 
-  if (profile?.role === 'patient') return null;
+  if (isPatient) return null;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -107,7 +107,8 @@ export default function Settings() {
     try {
       await seedLabCatalog();
       await seedPharmacyAndRadiology();
-      toast.success('تم زرع قاعدة البيانات بنجاح');
+      await seedDoctors();
+      toast.success('تم زرع قاعدة البيانات بنجاح (الأطباء، الخدمات، الصيدلية، المختبر)');
       window.location.reload();
     } catch (error) {
       toast.error('فشل زرع قاعدة البيانات');
@@ -622,7 +623,7 @@ export default function Settings() {
           <DialogHeader>
             <DialogTitle>تأكيد زرع البيانات</DialogTitle>
             <DialogDescription>
-              هل أنت متأكد من زرع البيانات الأولية؟ سيتم إضافة بيانات تجريبية للنظام (مرضى، مخزون، إعدادات).
+              هل أنت متأكد من زرع البيانات الأولية؟ سيتم تهيئة النظام ببيانات تجريبية تشمل (قائمة الأطباء، دليل الخدمات، المختبر، والصيدلية).
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="sm:justify-start gap-2">
