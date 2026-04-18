@@ -8,7 +8,10 @@ import {
   Timestamp, 
   orderBy,
   limit,
-  writeBatch
+  writeBatch,
+  onSnapshot,
+  type Unsubscribe,
+  getDoc
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { localDB } from './db';
@@ -28,50 +31,141 @@ const SYNC_COLLECTIONS = [
   { name: 'serviceRequests', firestoreName: 'service_requests', patientFilter: 'patientId' },
   { name: 'serviceCatalog', firestoreName: 'services_catalog' },
   { name: 'labCatalog', firestoreName: 'lab_catalog' },
-  { name: 'profiles', firestoreName: 'users', roles: ['admin'] } // Only admins can see all profiles locally
+  { name: 'profiles', firestoreName: 'users', roles: ['admin'] } 
 ];
 
 export class SyncService {
   private static isSyncing = false;
+  private static listeners: Unsubscribe[] = [];
+  private static lastSyncAttempt: number = 0;
 
   static async syncAll(userRole?: string, userId?: string) {
     if (this.isSyncing) return;
     if (!auth.currentUser) return;
 
-    // Default to 'patient' role if missing to ensure secure filtering during initial profile load Race Condition
-    // If we don't know the role, we MUST assume 'patient' to apply necessary where filters
+    const now = Date.now();
+    // Throttle manual syncAll to once every 5 seconds to prevent spam
+    if (now - this.lastSyncAttempt < 5000) return;
+    this.lastSyncAttempt = now;
+
     const effectiveRole = userRole || 'patient';
     const effectiveUserId = userId || auth.currentUser.uid;
 
     this.isSyncing = true;
-    const start = Date.now();
+    console.log(`[Sync] Starting full sync for ${effectiveRole} (${effectiveUserId})`);
     
     try {
-      // 1. First sync deletions (to clean up Firestore)
+      // 1. First sync deletions
       await this.syncDeletions().catch(e => console.error("[Sync] syncDeletions failed:", e));
 
+      // 2. Iterate through collections
       for (const col of SYNC_COLLECTIONS as any[]) {
         try {
-          // If a collection has specific roles, verify permission before syncing
           if (col.roles) {
-            if (!effectiveRole || !col.roles.includes(effectiveRole)) {
-              console.log(`[Sync] Skipping collection ${col.name}: effectiveRole ${effectiveRole} is not authorized.`);
-              continue;
-            }
+            if (!effectiveRole || !col.roles.includes(effectiveRole)) continue;
           }
           await this.syncCollection(col.name, col.firestoreName, effectiveRole, effectiveUserId, col.patientFilter);
         } catch (error) {
-          console.error(`[Sync] Failed to sync collection ${col.name}:`, error);
-          // Continue with next collection
+          console.error(`[Sync] Failed to sync ${col.name}:`, error);
         }
       }
       
-      const duration = ((Date.now() - start) / 1000).toFixed(1);
-      console.log(`[Sync] Completed all collections in ${duration}s`);
+      console.log(`[Sync] Full sync cycle completed.`);
     } catch (error) {
-      console.error('[Sync] Error during global sync:', error);
+      console.error('[Sync] Global sync error:', error);
     } finally {
       this.isSyncing = false;
+    }
+  }
+
+  static startRealtimeSync(userRole?: string, userId?: string) {
+    if (this.listeners.length > 0) return; // Already listening
+
+    const effectiveRole = userRole || 'patient';
+    const effectiveUserId = userId || auth.currentUser.uid;
+
+    console.log(`[Sync] Initializing realtime listeners for ${effectiveRole}`);
+
+    SYNC_COLLECTIONS.forEach(col => {
+      // 1. Check authorization for this user role
+      if (col.roles && !col.roles.includes(effectiveRole)) return;
+
+      // 2. Set up query
+      let constraints = [orderBy('updatedAt', 'desc'), limit(50)];
+      
+      if (effectiveRole === 'patient' && col.patientFilter && effectiveUserId) {
+        constraints.unshift(where(col.patientFilter, '==', effectiveUserId) as any);
+      }
+
+      const q = query(collection(db, col.firestoreName), ...constraints as any[]);
+
+      // 3. Subscribe to snapshots
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        snapshot.docChanges().forEach(async (change) => {
+          if (change.type === 'added' || change.type === 'modified') {
+            const data = change.doc.data();
+            data.id = change.doc.id;
+            this.sanitizeFromFirestore(data);
+            
+            const table = (localDB as any)[col.name];
+            const existing = await table.get(data.id);
+            
+            // Conflict resolution: only update if remote is actually newer
+            if (!existing || this.getTimestampMs(data.updatedAt) > this.getTimestampMs(existing.updatedAt)) {
+              await table.put(data);
+              console.log(`[Sync] realtime: updated local ${col.name}/${data.id}`);
+            }
+          }
+          if (change.type === 'removed') {
+            await (localDB as any)[col.name].delete(change.doc.id);
+            console.log(`[Sync] realtime: removed local ${col.name}/${change.doc.id}`);
+          }
+        });
+      }, (error) => {
+        console.error(`[Sync] Listener error for ${col.firestoreName}:`, error);
+        if (error.code === 'permission-denied') {
+          // Handle cleanup or notification?
+        }
+      });
+
+      this.listeners.push(unsubscribe);
+    });
+
+    // Also trigger an immediate push of any pending local changes
+    this.syncDeletions();
+    SYNC_COLLECTIONS.forEach(col => {
+      this.pushLocalChanges(col.name, col.firestoreName, 0);
+    });
+  }
+
+  static stopRealtimeSync() {
+    console.log(`[Sync] Stopping all realtime listeners (${this.listeners.length})`);
+    this.listeners.forEach(unsub => unsub());
+    this.listeners = [];
+  }
+
+  /**
+   * Pushes a specific item to Firestore immediately
+   */
+  static async pushItem(localName: string, item: any) {
+    if (!auth.currentUser) return;
+    
+    const col = SYNC_COLLECTIONS.find(c => c.name === localName);
+    if (!col) return;
+
+    try {
+      const docRef = doc(db, col.firestoreName, item.id);
+      const data = { ...item, updatedAt: Timestamp.now() };
+      this.sanitizeForFirestore(data);
+      await setDoc(docRef, data, { merge: true });
+      
+      // Update local with the new timestamp to keep in sync
+      this.sanitizeFromFirestore(data);
+      await (localDB as any)[localName].put(data);
+      
+      console.log(`[Sync] Successfully pushed item ${item.id} to ${col.firestoreName}`);
+    } catch (error) {
+      console.error(`[Sync] Failed to push item ${item.id}:`, error);
     }
   }
 
@@ -79,22 +173,19 @@ export class SyncService {
     const deleted = await localDB.deletedItems.toArray();
     if (deleted.length === 0) return;
 
-    console.log(`[Sync] Processing ${deleted.length} remote deletions`);
+    console.log(`[Sync] Pushing ${deleted.length} deletions to cloud`);
     
-    // Process deletions individually to avoid one fail blocking others
     for (const item of deleted) {
       const col = SYNC_COLLECTIONS.find(c => c.name === item.collectionName);
       if (col) {
         try {
           const docRef = doc(db, col.firestoreName, item.id);
-          await writeBatch(db).delete(docRef).commit(); // Using single-doc transaction-like commit
+          await setDoc(doc(db, 'deleted_vault', item.id), { ...item, syncedAt: Timestamp.now() }); // Optional: archive before delete
+          await writeBatch(db).delete(docRef).commit();
           await localDB.deletedItems.delete(item.id);
         } catch (error) {
-          console.error(`[Sync] Failed to delete ${item.id} from ${item.collectionName}:`, error);
-          // If permission denied, we might want to clear it anyway to stop annoying errors,
-          // but better to keep it if it's a temporary network error.
           if (error instanceof Error && error.message.includes('permission')) {
-             await localDB.deletedItems.delete(item.id); // Clear if we definitely don't have permission
+             await localDB.deletedItems.delete(item.id);
           }
         }
       }
@@ -106,28 +197,16 @@ export class SyncService {
     const lastSynced = meta?.lastSynced || 0;
     const now = Date.now();
 
-    try {
-      // 1. Push local changes (Items updated locally since last sync)
-      await this.pushLocalChanges(localName, firestoreName, lastSynced);
-
-      // 2. Pull remote changes (Items updated in Firestore since last sync)
-      await this.pullRemoteChanges(localName, firestoreName, lastSynced, userRole, userId, patientFilter);
-
-      // 3. Update sync metadata
-      await localDB.syncMetaData.put({ id: localName, lastSynced: now });
-      
-    } catch (error) {
-      console.error(`[Sync] Error syncing ${localName}:`, error);
-      throw error;
-    }
+    await this.pushLocalChanges(localName, firestoreName, lastSynced);
+    await this.pullRemoteChanges(localName, firestoreName, lastSynced, userRole, userId, patientFilter);
+    await localDB.syncMetaData.put({ id: localName, lastSynced: now });
   }
 
   private static async pushLocalChanges(localName: string, firestoreName: string, lastSynced: number) {
     const table = (localDB as any)[localName];
-    // Find items updated after last sync
-    // Standardizing on 'updatedAt' field. Some might be Firestore Timestamps or JS Dates
+    if (!table) return;
+
     const localItems = await table.toArray();
-    
     const dirtyItems = localItems.filter((item: any) => {
       const updatedAt = this.getTimestampMs(item.updatedAt || item.createdAt);
       return updatedAt > lastSynced;
@@ -135,9 +214,6 @@ export class SyncService {
 
     if (dirtyItems.length === 0) return;
 
-    console.log(`[Sync] Pushing ${dirtyItems.length} changes to ${firestoreName}`);
-
-    // Break into batches of 500 for Firestore
     for (let i = 0; i < dirtyItems.length; i += 500) {
       const batch = dirtyItems.slice(i, i + 500);
       const writeBatchObj = writeBatch(db);
@@ -145,8 +221,6 @@ export class SyncService {
       batch.forEach((item: any) => {
         const docRef = doc(db, firestoreName, item.id);
         const data = { ...item };
-        // Clear properties that don't belong in Firestore if needed
-        // Convert any JS Dates to Firestore Timestamps
         this.sanitizeForFirestore(data);
         writeBatchObj.set(docRef, data, { merge: true });
       });
@@ -157,37 +231,26 @@ export class SyncService {
 
   private static async pullRemoteChanges(localName: string, firestoreName: string, lastSynced: number, userRole?: string, userId?: string, patientFilter?: string) {
     const table = (localDB as any)[localName];
+    if (!table) return;
+
     const lastSyncedDate = new Date(lastSynced);
-    
     let constraints = [
       where('updatedAt', '>', Timestamp.fromDate(lastSyncedDate)),
       orderBy('updatedAt', 'asc'),
-      limit(1000)
+      limit(2000)
     ];
 
-    // If it's a patient, and the collection supports patient filtering, apply it
     if (userRole === 'patient' && patientFilter && userId) {
-      constraints = [
-        where(patientFilter, '==', userId),
-        ...constraints
-      ];
+      constraints.unshift(where(patientFilter, '==', userId) as any);
     }
 
-    const q = query(
-      collection(db, firestoreName),
-      ...constraints
-    );
-
+    const q = query(collection(db, firestoreName), ...constraints as any[]);
     const snapshot = await getDocs(q);
     if (snapshot.empty) return;
 
-    console.log(`[Sync] Pulling ${snapshot.size} changes from ${firestoreName}`);
-
     const remoteItems = snapshot.docs.map(doc => {
       const data = doc.data();
-      // Ensure ID is consistent
       data.id = doc.id;
-      // Convert Firestore Timestamps back to whatever localDB expects (usually Date or Number)
       this.sanitizeFromFirestore(data);
       return data;
     });
@@ -200,7 +263,10 @@ export class SyncService {
     if (val instanceof Timestamp) return val.toMillis();
     if (val instanceof Date) return val.getTime();
     if (typeof val === 'number') return val;
-    if (typeof val === 'string') return new Date(val).getTime();
+    if (typeof val === 'string') {
+      const parsed = Date.parse(val);
+      return isNaN(parsed) ? 0 : parsed;
+    }
     return 0;
   }
 
@@ -209,12 +275,11 @@ export class SyncService {
       const val = obj[key];
       if (val instanceof Date) {
         obj[key] = Timestamp.fromDate(val);
-      } else if (typeof val === 'number' && (key === 'updatedAt' || key === 'createdAt' || key === 'date' || key === 'deletedAt')) {
-        // Convert numbers that are definitely timestamps to Firestore Timestamps
-        if (val > 1000000000000) { // Simple check for ms timestamp
-          obj[key] = Timestamp.fromMillis(val);
+      } else if (typeof val === 'number' && (key === 'updatedAt' || key === 'createdAt' || key === 'date')) {
+        if (val > 1000000000) { 
+          obj[key] = Timestamp.fromMillis(val < 10000000000 ? val * 1000 : val);
         }
-      } else if (typeof val === 'object' && val !== null) {
+      } else if (typeof val === 'object' && val !== null && !(val instanceof Timestamp)) {
         this.sanitizeForFirestore(val);
       }
     }
@@ -230,3 +295,4 @@ export class SyncService {
     }
   }
 }
+

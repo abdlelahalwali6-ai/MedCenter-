@@ -16,6 +16,7 @@ export function useSync() {
         duration: 3000
       });
       SyncService.syncAll(profile?.role, user?.uid);
+      SyncService.startRealtimeSync(profile?.role, user?.uid);
     };
 
     const handleOffline = () => {
@@ -24,29 +25,35 @@ export function useSync() {
         position: 'bottom-right',
         duration: 5000
       });
+      SyncService.stopRealtimeSync();
     };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Initial sync if online
+    // Initial logic when user is authenticated
     if (user && isOnline) {
+      // 1. Initial full sync for missing items
       SyncService.syncAll(profile?.role, user?.uid).then(() => setLastSync(new Date()));
+      
+      // 2. Start realtime listeners
+      SyncService.startRealtimeSync(profile?.role, user?.uid);
     }
 
-    // Periodic sync every 2 minutes
+    // Periodic deep sync every 5 minutes (as redundancy)
     const interval = setInterval(() => {
       if (user && isOnline) {
         SyncService.syncAll(profile?.role, user?.uid).then(() => setLastSync(new Date()));
       }
-    }, 120000);
+    }, 300000);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      SyncService.stopRealtimeSync();
       clearInterval(interval);
     };
-  }, [user, isOnline]);
+  }, [user, isOnline, profile?.role]);
 
   return { isOnline, lastSync };
 }

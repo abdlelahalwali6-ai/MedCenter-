@@ -18,11 +18,14 @@ export class DataService {
     };
 
     const table = (localDB as any)[collectionName];
+    if (!table) throw new Error(`Table ${collectionName} not found in localDB`);
+
     await table.add(enrichedData);
     
-    // Trigger sync in background if online
+    // Trigger targeted sync immediately if online
     if (navigator.onLine) {
-      SyncService.syncAll();
+      // In background, don't wait for cloud to resolve for local smoothness
+      SyncService.pushItem(collectionName, enrichedData);
     }
     
     return id;
@@ -33,16 +36,23 @@ export class DataService {
    */
   static async update(collectionName: string, id: string, data: any) {
     const table = (localDB as any)[collectionName];
+    if (!table) throw new Error(`Table ${collectionName} not found in localDB`);
+
     const now = Date.now();
-    
-    await table.update(id, {
+    const updatePayload = {
       ...data,
       updatedAt: now,
       syncStatus: 'pending'
-    });
+    };
+    
+    await table.update(id, updatePayload);
     
     if (navigator.onLine) {
-      SyncService.syncAll();
+      // We need the full item for pushItem
+      const fullItem = await table.get(id);
+      if (fullItem) {
+        SyncService.pushItem(collectionName, fullItem);
+      }
     }
   }
 
@@ -51,7 +61,8 @@ export class DataService {
    */
   static async delete(collectionName: string, id: string) {
     const table = (localDB as any)[collectionName];
-    
+    if (!table) throw new Error(`Table ${collectionName} not found in localDB`);
+
     await table.delete(id);
     await localDB.deletedItems.add({
       id,
@@ -60,7 +71,8 @@ export class DataService {
     });
     
     if (navigator.onLine) {
-      SyncService.syncAll();
+      // Deletions are still handled by the periodic/manual syncAll or a specific call
+      SyncService.syncAll(); 
     }
   }
 
