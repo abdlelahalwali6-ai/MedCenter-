@@ -76,48 +76,50 @@ export default function Reports() {
   const inventoryCount = useLiveQuery(() => localDB.inventory.count()) || 0;
   const labRequestsCount = useLiveQuery(() => localDB.labRequests.count()) || 0;
 
-  useEffect(() => {
-    // Fetch filter options
-    const fetchOptions = async () => {
-      const pSnap = await getDocs(query(collection(db, 'patients'), orderBy('name', 'asc')));
-      const dSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'doctor')));
-      const sSnap = await getDocs(query(collection(db, 'services_catalog'), orderBy('name', 'asc')));
-      
-      setFilterLists(prev => ({
-        ...prev,
-        patients: pSnap.docs.map(doc => ({ id: doc.id, name: doc.data().name })),
-        doctors: dSnap.docs.map(doc => ({ id: doc.id, name: doc.data().displayName })),
-        services: sSnap.docs.map(doc => ({ id: doc.id, name: doc.data().name }))
-      }));
-    };
-    fetchOptions();
-  }, []);
+  const allPatients = useLiveQuery(() => localDB.patients.toArray()) || [];
+  const allDoctors = useLiveQuery(() => localDB.profiles.filter(p => p.role === 'doctor').toArray()) || [];
+  const allServices = useLiveQuery(() => localDB.serviceCatalog.toArray()) || [];
+  const allBills = useLiveQuery(() => localDB.bills.toArray()) || [];
+  const allAppointments = useLiveQuery(() => localDB.appointments.toArray()) || [];
 
   useEffect(() => {
-    const fetchRealData = async () => {
+    setFilterLists(prev => ({
+      ...prev,
+      patients: allPatients.map(p => ({ id: p.id, name: p.name })),
+      doctors: allDoctors.map(d => ({ id: d.uid, name: d.displayName })),
+      services: allServices.map(s => ({ id: s.id, name: s.name }))
+    }));
+  }, [allPatients, allDoctors, allServices]);
+
+  useEffect(() => {
+    const generateReports = async () => {
       setLoading(true);
       try {
-        const startTs = Timestamp.fromDate(new Date(dateRange.start));
-        const endTs = Timestamp.fromDate(new Date(dateRange.end));
+        const start = new Date(dateRange.start).getTime();
+        const end = new Date(dateRange.end).getTime() + (24 * 60 * 60 * 1000); // end of day
 
-        // 1. Patients trend (Basic trend usually doesn't apply per-doctor filter unless it's "Assigned Patients")
-        let pQuery = query(collection(db, 'patients'), where('createdAt', '>=', startTs), where('createdAt', '<=', endTs), orderBy('createdAt', 'asc'));
-        const pSnap = await getDocs(pQuery);
-        
+        // 1. Patients trend
+        const filteredPatients = allPatients.filter(p => {
+          const createdAt = p.createdAt ? new Date(p.createdAt).getTime() : 0;
+          return createdAt >= start && createdAt <= end;
+        });
+
         const patientTrend: {[key: string]: number} = {};
-        pSnap.docs.forEach(doc => {
-          const date = doc.data().createdAt?.toDate() || new Date();
+        filteredPatients.forEach(p => {
+          const date = p.createdAt ? new Date(p.createdAt) : new Date();
           const day = date.toLocaleDateString('ar-SA', { weekday: 'long' });
           patientTrend[day] = (patientTrend[day] || 0) + 1;
         });
 
         // 2. Bills for revenue with filters
-        let bConstraints = [where('createdAt', '>=', startTs), where('createdAt', '<=', endTs)];
-        if (filters.patientId !== 'all') bConstraints.push(where('patientId', '==', filters.patientId));
-        if (filters.costCenter !== 'all') bConstraints.push(where('costCenter', '==', filters.costCenter));
-        
-        const bQuery = query(collection(db, 'bills'), ...bConstraints);
-        const bSnap = await getDocs(bQuery);
+        const filteredBills = allBills.filter(b => {
+          const createdAt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          if (createdAt < start || createdAt > end) return false;
+          if (filters.patientId !== 'all' && b.patientId !== filters.patientId) return false;
+          if (filters.costCenter !== 'all' && b.costCenter !== filters.costCenter) return false;
+          if (filters.doctorId !== 'all' && b.doctorId !== filters.doctorId) return false;
+          return true;
+        });
         
         const revMap: {[key: string]: number} = {
           'عيادة': 0,
@@ -126,25 +128,22 @@ export default function Reports() {
           'صيدلية': 0
         };
         
-        bSnap.docs.forEach(doc => {
-          const data = doc.data();
-          // Filter by doctor (stored as doctorId in bills if applicable)
-          if (filters.doctorId !== 'all' && data.doctorId !== filters.doctorId) return;
-          
-          const type = data.type === 'clinic' ? 'عيادة' : 
-                       data.type === 'lab' ? 'مختبر' : 
-                       data.type === 'radiology' ? 'أشعة' : 
-                       data.type === 'pharmacy' ? 'صيدلية' : 'أخرى';
-          revMap[type] = (revMap[type] || 0) + (data.totalAmount || 0); // Corrected to totalAmount based on schema
+        filteredBills.forEach(b => {
+          const type = b.type === 'clinic' ? 'عيادة' : 
+                       b.type === 'lab' ? 'مختبر' : 
+                       b.type === 'radiology' ? 'أشعة' : 
+                       b.type === 'pharmacy' ? 'صيدلية' : 'أخرى';
+          revMap[type] = (revMap[type] || 0) + (b.totalAmount || 0);
         });
 
         // 3. Appointments Status with filters
-        let aConstraints = [where('date', '>=', startTs), where('date', '<=', endTs)];
-        if (filters.patientId !== 'all') aConstraints.push(where('patientId', '==', filters.patientId));
-        if (filters.doctorId !== 'all') aConstraints.push(where('doctorId', '==', filters.doctorId));
-        
-        const aQuery = query(collection(db, 'appointments'), ...aConstraints);
-        const aSnap = await getDocs(aQuery);
+        const filteredAppointments = allAppointments.filter(a => {
+          const appDate = a.date ? new Date(a.date).getTime() : 0;
+          if (appDate < start || appDate > end) return false;
+          if (filters.patientId !== 'all' && a.patientId !== filters.patientId) return false;
+          if (filters.doctorId !== 'all' && a.doctorId !== filters.doctorId) return false;
+          return true;
+        });
         
         const statusMap: {[key: string]: number} = {
           'scheduled': 0,
@@ -152,8 +151,8 @@ export default function Reports() {
           'cancelled': 0,
           'checked-in': 0
         };
-        aSnap.docs.forEach(doc => {
-          const status = doc.data().status || 'scheduled';
+        filteredAppointments.forEach(a => {
+          const status = a.status || 'scheduled';
           statusMap[status] = (statusMap[status] || 0) + 1;
         });
 
@@ -174,15 +173,15 @@ export default function Reports() {
           ]
         });
       } catch (error) {
-        console.error("Report fetch error:", error);
-        toast.error('فشل في مزامنة البيانات الحقيقية للتقارير');
+        console.error("Report generation error:", error);
+        toast.error('فشل في توليد التقارير من البيانات المحلية');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchRealData();
-  }, [dateRange, filters]);
+    generateReports();
+  }, [dateRange, filters, allPatients, allDoctors, allServices, allBills, allAppointments]);
 
   if (profile?.role === 'patient') return null;
 

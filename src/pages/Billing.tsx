@@ -37,11 +37,11 @@ export default function Billing() {
 
   if (profile?.role === 'patient') return null;
 
-  const bills = useLiveQuery(() => localDB.bills.toArray(), []) || [];
-  const patients = useLiveQuery(() => localDB.patients.toArray(), []) || [];
-  const serviceRequests = useLiveQuery(() => localDB.serviceRequests.toArray(), []) || [];
-  const servicesCatalog = useLiveQuery(() => localDB.serviceCatalog.toArray(), []) || [];
-  const [doctors, setDoctors] = useState<UserProfile[]>([]);
+  const bills = useLiveQuery(() => localDB.bills.orderBy('createdAt').reverse().toArray(), []) || [];
+  const patients = useLiveQuery(() => localDB.patients.orderBy('name').toArray(), []) || [];
+  const serviceRequests = useLiveQuery(() => localDB.serviceRequests.orderBy('createdAt').reverse().toArray(), []) || [];
+  const servicesCatalog = useLiveQuery(() => localDB.serviceCatalog.orderBy('name').toArray(), []) || [];
+  const doctors = useLiveQuery(() => localDB.profiles.where('role').equals('doctor').toArray(), []) || [];
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
@@ -73,35 +73,11 @@ export default function Billing() {
   useEffect(() => {
     if (!profile || profile.role === 'patient') return;
 
-    const q = query(collection(db, 'bills'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, (snapshot) => {
-      // Data updated by SyncService, useLiveQuery handles the UI
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'bills'));
-
-    const qPat = query(collection(db, 'patients'), orderBy('name', 'asc'));
-    const unsubPat = onSnapshot(qPat, (snapshot) => {
-      if (patientIdFromUrl) {
-        setNewBill(prev => ({ ...prev, patientId: patientIdFromUrl }));
-        setIsAddDialogOpen(true);
-      }
-    });
-
-    const unsubRequests = onSnapshot(query(collection(db, 'service_requests'), orderBy('createdAt', 'desc')), (snap) => {
-      // SyncService handles this
-    });
-
-    const unsubCatalog = onSnapshot(collection(db, 'services_catalog'), (snap) => {
-      // SyncService handles this
-    });
-
-    const unsubDoc = onSnapshot(query(collection(db, 'users')), (snapshot) => {
-      setDoctors(snapshot.docs
-        .map(doc => ({ uid: doc.id, ...doc.data() }))
-        .filter((u: any) => u.role === 'doctor') as UserProfile[]);
-    });
-
-    return () => { unsub(); unsubPat(); unsubRequests(); unsubCatalog(); unsubDoc(); };
-  }, [profile, patientIdFromUrl]);
+    if (patientIdFromUrl && patients.length > 0) {
+      setNewBill(prev => ({ ...prev, patientId: patientIdFromUrl }));
+      setIsAddDialogOpen(true);
+    }
+  }, [profile, patientIdFromUrl, patients.length]);
 
   const handleCreateBill = async (e: React.FormEvent) => {
     e.preventDefault();

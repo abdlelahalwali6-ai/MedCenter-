@@ -26,7 +26,7 @@ import { useAuth } from '@/src/context/AuthContext';
 
 export default function Services() {
   const { profile, isAdmin } = useAuth();
-  const [services, setServices] = useState<ServiceCatalogItem[]>([]);
+  const services = useLiveQuery(() => localDB.serviceCatalog.orderBy('name').toArray(), []) || [];
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -39,24 +39,13 @@ export default function Services() {
     description: ''
   });
 
-  useEffect(() => {
-    if (!profile || profile.role === 'patient') return;
-
-    const q = query(collection(db, 'services_catalog'), orderBy('name', 'asc'));
-    const unsub = onSnapshot(q, (snapshot) => {
-      setServices(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ServiceCatalogItem[]);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'services_catalog'));
-
-    return () => unsub();
-  }, [profile]);
+  // Fetching moved to useLiveQuery above
 
   const handleAddService = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await addDoc(collection(db, 'services_catalog'), {
+      await DataService.create('serviceCatalog', {
         ...formData,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
       });
       toast.success('تم إضافة الخدمة بنجاح');
       setIsAddDialogOpen(false);
@@ -70,9 +59,8 @@ export default function Services() {
     e.preventDefault();
     if (!selectedService) return;
     try {
-      await updateDoc(doc(db, 'services_catalog', selectedService.id), {
+      await DataService.update('serviceCatalog', selectedService.id, {
         ...formData,
-        updatedAt: serverTimestamp()
       });
       toast.success('تم تحديث الخدمة بنجاح');
       setIsEditDialogOpen(false);
@@ -84,7 +72,7 @@ export default function Services() {
   const handleDeleteService = async (id: string) => {
     if (!window.confirm('هل أنت متأكد من حذف هذه الخدمة؟')) return;
     try {
-      await deleteDoc(doc(db, 'services_catalog', id));
+      await DataService.delete('serviceCatalog', id);
       toast.success('تم حذف الخدمة');
     } catch (error) {
       toast.error('فشل حذف الخدمة');

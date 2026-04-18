@@ -24,7 +24,7 @@ import { useAuth } from '@/src/context/AuthContext';
 
 export default function AuditLogs() {
   const { profile, isAdmin } = useAuth();
-  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const logs = useLiveQuery(() => localDB.auditLogs.orderBy('createdAt').reverse().limit(100).toArray(), []) || [];
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
 
@@ -35,14 +35,7 @@ export default function AuditLogs() {
     </div>
   );
 
-  useEffect(() => {
-    const q = query(collection(db, 'audit_logs'), orderBy('createdAt', 'desc'), limit(100));
-    const unsub = onSnapshot(q, (snapshot) => {
-      setLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as AuditLog[]);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'audit_logs'));
-
-    return () => unsub();
-  }, []);
+  // Fetching moved to useLiveQuery above
 
   const filteredLogs = logs.filter(log => {
     const matchesSearch = 

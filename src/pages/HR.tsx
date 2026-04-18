@@ -40,7 +40,7 @@ export default function HR() {
 
   if (isPatient) return null;
 
-  const [users, setUsers] = useState<UserProfile[]>([]);
+  const users = useLiveQuery(() => localDB.profiles.orderBy('displayName').toArray(), []) || [];
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -56,15 +56,7 @@ export default function HR() {
 
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
 
-  useEffect(() => {
-    if (!isAdmin) return;
-
-    const q = query(collection(db, 'users'), orderBy('displayName', 'asc'));
-    const unsub = onSnapshot(q, (snapshot) => {
-      setUsers(snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() })) as UserProfile[]);
-    });
-    return () => unsub();
-  }, [currentUserProfile]);
+  // Fetching moved to useLiveQuery above
 
   const handleAddStaff = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,19 +68,17 @@ export default function HR() {
 
     setLoading(true);
     try {
-      // 1. Create the Auth User
+      // 1. Create the Auth User (Requires cloud)
       const uid = await createNewUser(newStaff.email, newStaff.password, newStaff.displayName);
       
-      // 2. Create the Firestore Profile
-      const userRef = doc(db, 'users', uid);
-      await setDoc(userRef, {
+      // 2. Create the Firestore Profile via DataService for offline consistency
+      await DataService.create('profiles', {
+        id: uid, // Use Auth UID as document ID
         uid: uid,
         displayName: newStaff.displayName,
         email: newStaff.email,
         phoneNumber: newStaff.phoneNumber,
         role: newStaff.role,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
       });
 
       toast.success('تم إنشاء حساب الموظف بنجاح');
@@ -112,12 +102,10 @@ export default function HR() {
 
     setLoading(true);
     try {
-      const userRef = doc(db, 'users', editingUser.uid);
-      await updateDoc(userRef, {
+      await DataService.update('profiles', editingUser.uid, {
         displayName: editingUser.displayName,
         phoneNumber: editingUser.phoneNumber || '',
         role: editingUser.role,
-        updatedAt: serverTimestamp()
       });
       toast.success('تم تحديث بيانات الموظف بنجاح');
       setIsEditDialogOpen(false);
@@ -137,7 +125,7 @@ export default function HR() {
     if (!window.confirm('هل أنت متأكد من حذف هذا المستخدم من قاعدة البيانات؟ ملاحظة: لن يتم حذف حساب الدخول في الـ Auth تلقائياً.')) return;
     
     try {
-      await deleteDoc(doc(db, 'users', userId));
+      await DataService.delete('profiles', userId);
       toast.success('تم حذف ملف المستخدم بنجاح');
     } catch (error) {
       toast.error('فشل حذف المستخدم');

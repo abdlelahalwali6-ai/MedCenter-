@@ -64,13 +64,13 @@ export default function Lab() {
   if (profile?.role === 'patient') return null;
 
   const requests = useLiveQuery(() => localDB.labRequests.reverse().toArray(), []) || [];
-  const [patients, setPatients] = useState<Patient[]>([]);
+  const patients = useLiveQuery(() => localDB.patients.orderBy('name').toArray(), []) || [];
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRequest, setSelectedRequest] = useState<LabRequest | null>(null);
   const [isResultDialogOpen, setIsResultDialogOpen] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingResults, setEditingResults] = useState<LabTest[]>([]);
-  const [catalog, setCatalog] = useState<LabCatalogItem[]>([]);
+  const catalog = useLiveQuery(() => localDB.labCatalog.toArray(), []) || [];
   const [isCatalogDialogOpen, setIsCatalogDialogOpen] = useState(false);
   const [editingCatalogItem, setEditingCatalogItem] = useState<Partial<LabCatalogItem> | null>(null);
   const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
@@ -108,30 +108,14 @@ export default function Lab() {
 
     fetchSettings();
     
-    const qPat = query(collection(db, 'patients'), orderBy('name', 'asc'));
-    const unsubPat = onSnapshot(qPat, (snapshot) => {
-      const patientsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Patient[];
-      setPatients(patientsData);
-      
-      if (patientIdFromUrl) {
-        const patient = patientsData.find(p => p.id === patientIdFromUrl);
-        if (patient) {
-          setNewRequest(prev => ({ ...prev, patientId: patient.id }));
-          setIsAddDialogOpen(true);
-        }
+    if (patientIdFromUrl && patients.length > 0) {
+      const patient = patients.find(p => p.id === patientIdFromUrl);
+      if (patient) {
+        setNewRequest(prev => ({ ...prev, patientId: patient.id }));
+        setIsAddDialogOpen(true);
       }
-    });
-
-    return () => { unsubPat(); };
-  }, [profile, patientIdFromUrl]);
-
-  useEffect(() => {
-    if (!profile || profile.role === 'patient') return;
-    const unsubCatalog = onSnapshot(collection(db, 'lab_catalog'), (snap) => {
-      setCatalog(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LabCatalogItem[]);
-    });
-    return () => unsubCatalog();
-  }, [profile]);
+    }
+  }, [profile, patientIdFromUrl, patients.length]);
 
   const handleCreateRequest = async () => {
     const patient = patients.find(p => p.id === newRequest.patientId);
