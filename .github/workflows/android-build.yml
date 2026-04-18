@@ -56,6 +56,10 @@ jobs:
     - name: Fix Android permissions
       run: chmod +x android/gradlew
 
+    - name: Repair Gradle Wrapper (if corrupt)
+      run: |
+        curl -L https://raw.githubusercontent.com/gradle/gradle/v8.14.3/gradle/wrapper/gradle-wrapper.jar -o android/gradle/wrapper/gradle-wrapper.jar
+
     - name: Sync Capacitor Android
       run: npx cap sync android
 
