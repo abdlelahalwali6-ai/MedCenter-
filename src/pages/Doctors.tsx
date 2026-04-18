@@ -33,7 +33,7 @@ export default function Doctors() {
 
   if (currentUserProfile?.role !== 'admin') return null;
 
-  const doctors = useLiveQuery(() => localDB.profiles.filter(p => p.role === 'doctor').toArray(), []) || [];
+  const [doctors, setDoctors] = useState<UserProfile[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDoctor, setSelectedDoctor] = useState<UserProfile | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -48,8 +48,14 @@ export default function Doctors() {
     }
   });
 
-  // Fetching moved to useLiveQuery above
-  
+  useEffect(() => {
+    const q = query(collection(db, 'users'), where('role', '==', 'doctor'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      setDoctors(snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() })) as UserProfile[]);
+    });
+    return () => unsub();
+  }, []);
+
   const handleEditClick = (doctor: UserProfile) => {
     setSelectedDoctor(doctor);
     setEditData({
@@ -65,8 +71,10 @@ export default function Doctors() {
     if (!selectedDoctor) return;
 
     try {
-      await DataService.update('profiles', selectedDoctor.uid, {
+      const docRef = doc(db, 'users', selectedDoctor.uid);
+      await updateDoc(docRef, {
         ...editData,
+        updatedAt: new Date().toISOString()
       });
       toast.success('تم تحديث بيانات الطبيب بنجاح');
       setIsEditDialogOpen(false);

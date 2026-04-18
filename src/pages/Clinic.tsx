@@ -1,12 +1,24 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { localDB } from '@/src/lib/db';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { DataService } from '@/src/lib/dataService';
-import { SyncService } from '@/src/lib/syncService';
-import { formatArabicDate, toDate } from '@/src/lib/dateUtils';
+import { 
+  collection, 
+  query, 
+  onSnapshot, 
+  addDoc, 
+  where,
+  serverTimestamp,
+  orderBy,
+  Timestamp
+} from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
+import { formatArabicDate } from '@/src/lib/dateUtils';
 import { logAction } from '@/src/lib/audit';
-import { Patient, MedicalRecord, Appointment, LabCatalogItem, ServiceCatalogItem } from '@/src/types';
+import { Patient, MedicalRecord, Appointment, LabTest, LabRequest, RadiologyRequest, Prescription, LabCatalogItem, ServiceCatalogItem } from '@/src/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,7 +26,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, FileText, Plus, History, ClipboardList, Pill, FlaskConical, Stethoscope, Thermometer, Activity, Weight, Heart, Trash2, CheckCircle2 } from 'lucide-react';
+import { Search, FileText, Plus, History, ClipboardList, Pill, FlaskConical, Stethoscope, Thermometer, Activity, Weight, Printer, Heart, Trash2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/src/context/AuthContext';
 
@@ -26,16 +38,12 @@ export default function Clinic() {
   if (isPatient) return null;
 
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const patients = useLiveQuery(() => localDB.patients.orderBy('name').toArray(), []) || [];
-  const appointments = useLiveQuery(() => localDB.appointments.toArray(), []) || [];
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [records, setRecords] = useState<MedicalRecord[]>([]);
   const [activeTab, setActiveTab] = useState('new-visit');
   
-  // Catalogs from localDB (synced by SyncService)
-  const labCatalog = useLiveQuery(() => localDB.labCatalog.toArray(), []) || [];
-  const servicesCatalog = useLiveQuery(() => localDB.serviceCatalog.where('category').notEqual('radiology').toArray(), []) || [];
-  const radiologyCatalog = useLiveQuery(() => localDB.serviceCatalog.where('category').equals('radiology').toArray(), []) || [];
-
   const [newRecord, setNewRecord] = useState({
     complaint: '',
     diagnosis: '',
@@ -51,21 +59,72 @@ export default function Clinic() {
 
   const [prescription, setPrescription] = useState<{name: string, dosage: string, frequency: string, duration: string}[]>([]);
   const [labTests, setLabTests] = useState<string[]>([]);
+  const [labCatalog, setLabCatalog] = useState<LabCatalogItem[]>([]);
+  const [servicesCatalog, setServicesCatalog] = useState<ServiceCatalogItem[]>([]);
+  const [radiologyCatalog, setRadiologyCatalog] = useState<any[]>([]);
   const [radType, setRadType] = useState('');
   const [requestedServices, setRequestedServices] = useState<string[]>([]);
 
-  // Selected patient's records
-  const records = useLiveQuery(
-    () => selectedPatient ? localDB.medicalRecords.where('patientId').equals(selectedPatient.id).reverse().toArray() : Promise.resolve([]),
-    [selectedPatient]
-  ) || [];
+  useEffect(() => {
+    const q = query(collection(db, 'patients'), orderBy('name', 'asc'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const patientsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Patient[];
+      setPatients(patientsData);
+      
+      // Auto-select patient from URL if provided
+      if (patientIdFromUrl) {
+        const patient = patientsData.find(p => p.id === patientIdFromUrl);
+        if (patient) setSelectedPatient(patient);
+      }
+    });
+
+    // Fetch today's appointments for "checked-in" status
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    const qApp = query(
+      collection(db, 'appointments'), 
+      where('date', '>=', Timestamp.fromDate(startOfDay)),
+      where('date', '<=', Timestamp.fromDate(endOfDay))
+    );
+    const unsubApp = onSnapshot(qApp, (snap) => {
+      setAppointments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Appointment[]);
+    });
+
+    return () => { unsub(); unsubApp(); };
+  }, [patientIdFromUrl]);
 
   useEffect(() => {
-    if (patientIdFromUrl && patients.length > 0) {
-      const patient = patients.find(p => p.id === patientIdFromUrl);
-      if (patient) setSelectedPatient(patient);
+    if (selectedPatient) {
+      const qRec = query(
+        collection(db, 'medical_records'), 
+        where('patientId', '==', selectedPatient.id),
+        orderBy('createdAt', 'desc')
+      );
+      const unsubRec = onSnapshot(qRec, (snapshot) => {
+        setRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as MedicalRecord[]);
+      });
+      return () => unsubRec();
     }
-  }, [patientIdFromUrl, patients]);
+  }, [selectedPatient]);
+
+  useEffect(() => {
+    const unsubCatalog = onSnapshot(collection(db, 'lab_catalog'), (snap) => {
+      setLabCatalog(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LabCatalogItem[]);
+    });
+    
+    const unsubServices = onSnapshot(collection(db, 'services_catalog'), (snap) => {
+      setServicesCatalog(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ServiceCatalogItem[]);
+    });
+
+    const unsubRadiology = onSnapshot(collection(db, 'radiology_catalog'), (snap) => {
+      setRadiologyCatalog(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    
+    return () => { unsubCatalog(); unsubServices(); unsubRadiology(); };
+  }, []);
 
   const handleSaveVisit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,38 +132,40 @@ export default function Clinic() {
 
     try {
       // 1. Save Medical Record
-      const recordId = await DataService.create('medicalRecords', {
+      const recordRef = await addDoc(collection(db, 'medical_records'), {
         patientId: selectedPatient.id,
         doctorId: profile.uid,
         doctorName: profile.displayName,
         ...newRecord,
+        createdAt: serverTimestamp()
       });
 
       await logAction(
         profile,
         'إضافة سجل طبي',
         'record',
-        recordId,
+        recordRef.id,
         `زيارة جديدة للمريض: ${selectedPatient.name}`,
         { diagnosis: newRecord.diagnosis }
       );
 
       // 2. Save Prescription if any
       if (prescription.length > 0) {
-        await DataService.create('prescriptions', {
+        await addDoc(collection(db, 'prescriptions'), {
           patientId: selectedPatient.id,
           patientName: selectedPatient.name,
           doctorId: profile.uid,
           doctorName: profile.displayName,
           medications: prescription,
           status: 'pending',
+          createdAt: serverTimestamp()
         });
       }
 
       // 3. Save Lab Request if any
       if (labTests.length > 0) {
         const selectedTests = labCatalog.filter(c => labTests.includes(c.id));
-        await DataService.create('labRequests', {
+        await addDoc(collection(db, 'lab_requests'), {
           patientId: selectedPatient.id,
           patientName: selectedPatient.name,
           doctorId: profile.uid,
@@ -115,19 +176,20 @@ export default function Clinic() {
             items: t.items || []
           })),
           status: 'pending',
+          createdAt: serverTimestamp()
         });
       }
 
       // 4. Save Radiology Request if any
       if (radType) {
-        const selectedRad = radiologyCatalog.find(r => r.id === radType);
-        await DataService.create('radiologyRequests', {
+        await addDoc(collection(db, 'radiology_requests'), {
           patientId: selectedPatient.id,
           patientName: selectedPatient.name,
           doctorId: profile.uid,
           doctorName: profile.displayName,
-          type: selectedRad?.name || radType,
+          type: radType,
           status: 'pending',
+          createdAt: serverTimestamp()
         });
       }
 
@@ -136,7 +198,7 @@ export default function Clinic() {
         for (const serviceId of requestedServices) {
           const service = servicesCatalog.find(s => s.id === serviceId);
           if (service) {
-            await DataService.create('serviceRequests', {
+            await addDoc(collection(db, 'service_requests'), {
               patientId: selectedPatient.id,
               patientName: selectedPatient.name,
               doctorId: profile.uid,
@@ -145,6 +207,7 @@ export default function Clinic() {
               serviceName: service.name,
               price: service.price,
               status: 'pending',
+              createdAt: serverTimestamp()
             });
           }
         }
@@ -154,19 +217,51 @@ export default function Clinic() {
       let billAmount = profile.consultationFee || 150;
       let billDescription = 'رسوم كشفية طبية - ' + newRecord.diagnosis;
 
-      // Handle follow-ups etc logic here...
+      // Check for free follow-up
+      if (profile.freeFollowUps && profile.freeFollowUps > 0) {
+        const recentRecords = records.filter(r => r.doctorId === profile.uid);
+        if (recentRecords.length > 0 && recentRecords.length <= profile.freeFollowUps) {
+          billAmount = 0;
+          billDescription = 'زيارة عودة مجانية - ' + newRecord.diagnosis;
+        }
+      }
 
-      await DataService.create('bills', {
+      // Add services to bill amount
+      const selectedServices = servicesCatalog.filter(s => requestedServices.includes(s.id));
+      const servicesTotal = selectedServices.reduce((acc, s) => acc + s.price, 0);
+      billAmount += servicesTotal;
+      if (selectedServices.length > 0) {
+        billDescription += ' + خدمات: ' + selectedServices.map(s => s.name).join(', ');
+      }
+
+      // Add Lab tests to bill amount
+      const selectedLabTests = labCatalog.filter(t => labTests.includes(t.id));
+      const labTotal = selectedLabTests.reduce((acc, t) => acc + (t.price || 0), 0);
+      billAmount += labTotal;
+      if (selectedLabTests.length > 0) {
+        billDescription += ' + فحوصات مخبرية: ' + selectedLabTests.map(t => t.name).join(', ');
+      }
+
+      // Add Radiology to bill amount
+      const selectedRad = radiologyCatalog.find(r => r.id === radType || r.name === radType);
+      if (selectedRad) {
+        billAmount += selectedRad.price || 0;
+        billDescription += ' + أشعة: ' + selectedRad.name;
+      }
+
+      await addDoc(collection(db, 'bills'), {
         patientId: selectedPatient.id,
         patientName: selectedPatient.name,
         totalAmount: billAmount,
         description: billDescription,
         paymentMethod: 'cash',
         status: billAmount === 0 ? 'paid' : 'unpaid',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       });
 
       toast.success('تم حفظ الزيارة والطلبات وإنشاء الفاتورة بنجاح');
-      setNewRecord({ complaint: '', diagnosis: '', treatmentPlan: '', vitals: { temperature: '', bloodPressure: '', weight: '', pulse: '', spO2: '' } });
+      setNewRecord({ complaint: '', diagnosis: '', treatmentPlan: '', vitals: { temperature: '', bloodPressure: '', weight: '' } });
       setPrescription([]);
       setLabTests([]);
       setRequestedServices([]);
@@ -288,6 +383,7 @@ export default function Clinic() {
 
               <TabsContent value="new-visit" className="mt-6 space-y-6">
                 <form onSubmit={handleSaveVisit} className="space-y-6">
+                  {/* Vitals Grid */}
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                     {[
                       { label: 'الحرارة', unit: '°C', icon: Thermometer, key: 'temperature', color: 'text-orange-500', bg: 'bg-orange-50' },
@@ -388,6 +484,7 @@ export default function Clinic() {
                           </label>
                         ))}
                       </div>
+                      {labCatalog.length === 0 && <p className="text-[10px] text-muted-foreground">لا توجد فحوصات متاحة في القائمة.</p>}
                     </div>
                     <div className="space-y-2">
                       <Label className="font-bold">خدمات تمريضية / أخرى</Label>
@@ -410,6 +507,7 @@ export default function Clinic() {
                           </label>
                         ))}
                       </div>
+                      {servicesCatalog.length === 0 && <p className="text-[10px] text-muted-foreground">لا توجد خدمات متاحة في القائمة.</p>}
                     </div>
                   </div>
 
@@ -421,63 +519,40 @@ export default function Clinic() {
                         </SelectTrigger>
                         <SelectContent>
                           {radiologyCatalog.map(item => (
-                            <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                            <SelectItem key={item.id} value={item.id}>{item.name} ({item.price} ر.ي)</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
 
                   <div className="flex justify-end gap-3">
-                    <Button type="submit" className="w-full md:w-auto h-12 px-10 text-lg font-bold">حفظ وإنهاء الزيارة</Button>
+                    <Button type="submit" className="w-full md:w-auto">حفظ وإنهاء الزيارة</Button>
                   </div>
                 </form>
               </TabsContent>
 
               <TabsContent value="history" className="mt-6 space-y-4">
                 {records.length === 0 ? (
-                  <div className="text-center py-24 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
-                    <History size={64} className="mx-auto text-slate-200 mb-4" />
-                    <p className="text-slate-400 mb-4 font-bold">لا توجد سجلات طبية سابقة لهذا المريض</p>
-                    <Button onClick={() => setActiveTab('new-visit')} className="gap-2 rounded-xl">
+                  <div className="text-center py-12 bg-muted/20 rounded-lg border-2 border-dashed">
+                    <History size={48} className="mx-auto text-muted-foreground mb-4 opacity-20" />
+                    <p className="text-muted-foreground mb-4">لا توجد سجلات طبية سابقة لهذا المريض</p>
+                    <Button onClick={() => setActiveTab('new-visit')} className="gap-2">
                       <Plus size={16} /> إنشاء أول سجل طبي
                     </Button>
                   </div>
                 ) : (
                   records.map(record => (
-                  <Card key={record.id} className="border-none shadow-sm hover:shadow-md transition-shadow rounded-2xl overflow-hidden">
-                    <CardHeader className="py-4 bg-slate-50/80">
+                  <Card key={record.id}>
+                    <CardHeader className="py-3 bg-muted/30">
                       <div className="flex justify-between items-center">
-                        <span className="font-black text-primary text-sm flex items-center gap-2">
-                          <History size={16} /> زيارة بتاريخ: {formatArabicDate(record.createdAt)}
-                        </span>
-                        <span className="text-[0.65rem] font-bold text-slate-400 bg-white px-2 py-1 rounded-lg border">الطبيب: {record.doctorName || 'غير محدد'}</span>
+                        <span className="font-bold text-primary">زيارة بتاريخ: {formatArabicDate(record.createdAt)}</span>
+                        <span className="text-xs text-muted-foreground">الطبيب: {record.doctorName || record.doctorId}</span>
                       </div>
                     </CardHeader>
-                    <CardContent className="py-6 space-y-4">
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 border-b pb-4 border-slate-50">
-                         {Object.entries(record.vitals || {}).map(([k, v]) => (
-                           <div key={k} className="flex flex-col">
-                             <span className="text-[0.6rem] text-slate-400 font-bold uppercase">{k}</span>
-                             <span className="font-black text-slate-800">{v as string || '-'}</span>
-                           </div>
-                         ))}
-                      </div>
-                      <div className="grid gap-4">
-                        <div>
-                          <Label className="text-[0.7rem] font-black text-slate-400 uppercase mb-1 block">الشكوى</Label>
-                          <p className="text-slate-700 leading-relaxed">{record.complaint}</p>
-                        </div>
-                        <div>
-                          <Label className="text-[0.7rem] font-black text-slate-400 uppercase mb-1 block">التشخيص</Label>
-                          <p className="text-slate-800 font-bold leading-relaxed">{record.diagnosis}</p>
-                        </div>
-                        {record.treatmentPlan && (
-                          <div>
-                            <Label className="text-[0.7rem] font-black text-slate-400 uppercase mb-1 block">الخطة العلاجية</Label>
-                            <p className="text-slate-700 leading-relaxed">{record.treatmentPlan}</p>
-                          </div>
-                        )}
-                      </div>
+                    <CardContent className="py-4 space-y-2">
+                      <p><strong>الشكوى:</strong> {record.complaint}</p>
+                      <p><strong>التشخيص:</strong> {record.diagnosis}</p>
+                      <p><strong>العلاج:</strong> {record.treatmentPlan}</p>
                     </CardContent>
                   </Card>
                 )))}
@@ -485,10 +560,9 @@ export default function Clinic() {
             </Tabs>
           </>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center text-slate-300 bg-white rounded-3xl border border-dashed border-slate-200 p-20">
-            <Stethoscope size={80} className="mb-6 opacity-20" />
-            <h3 className="text-2xl font-black text-slate-400 mb-2">بوابة المعاينة السريرية</h3>
-            <p className="text-slate-400 font-medium">يرجى اختيار مريض من قائمة الانتظار للبدء</p>
+          <div className="h-full flex flex-col items-center justify-center text-muted-foreground bg-white rounded-xl border border-dashed border-border p-20">
+            <FileText size={64} className="mb-4 opacity-20" />
+            <p className="text-xl font-medium">يرجى اختيار مريض من القائمة الجانبية للبدء</p>
           </div>
         )}
       </div>

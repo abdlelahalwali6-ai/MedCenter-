@@ -64,30 +64,14 @@ export default function Dashboard() {
 
   if (isPatient) return null;
 
-  const totalPatientCount = useLiveQuery(() => localDB.patients.count(), []) || 0;
-  const pendingPrescriptionsCount = useLiveQuery(() => localDB.prescriptions.where('status').equals('pending').count(), []) || 0;
-  const pendingRadiologyCount = useLiveQuery(() => localDB.radiologyRequests.where('status').equals('pending').count(), []) || 0;
-  
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayMillis = today.getTime();
-
-  const todayAppointments = useLiveQuery(
-    () => localDB.appointments.filter(a => {
-      const d = toDate(a.date);
-      return d.getTime() >= todayMillis;
-    }).toArray(),
-    []
-  ) || [];
-
-  const todayBills = useLiveQuery(
-    () => localDB.bills.filter(b => {
-      const d = toDate(b.createdAt);
-      return d.getTime() >= todayMillis;
-    }).toArray(),
-    []
-  ) || [];
-
+  const [counts, setCounts] = useState({
+    patients: 0,
+    appointments: 0,
+    prescriptions: 0,
+    radiology: 0,
+    revenue: 0
+  });
+  const [recentAppointments, setRecentAppointments] = useState<any[]>([]);
   const [chartView, setChartView] = useState<'patients' | 'revenue'>('patients');
   const [chartData, setChartData] = useState<any[]>([]);
 
@@ -116,10 +100,29 @@ export default function Dashboard() {
       }
 
       try {
-        const results = await localDB.patients
-          .filter(p => p.name.includes(quickSearch) || (p.phone && p.phone.includes(quickSearch)))
-          .limit(5)
-          .toArray();
+        const q = query(
+          collection(db, 'patients'),
+          where('name', '>=', quickSearch),
+          where('name', '<=', quickSearch + '\uf8ff'),
+          limit(5)
+        );
+        const snap = await getDocs(q);
+        const results = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        if (results.length < 5) {
+          const qPhone = query(
+            collection(db, 'patients'),
+            where('phone', '>=', quickSearch),
+            where('phone', '<=', quickSearch + '\uf8ff'),
+            limit(5 - results.length)
+          );
+          const snapPhone = await getDocs(qPhone);
+          snapPhone.docs.forEach(doc => {
+            if (!results.find(r => r.id === doc.id)) {
+              results.push({ id: doc.id, ...doc.data() });
+            }
+          });
+        }
 
         setSuggestions(results);
         setShowSuggestions(results.length > 0);
@@ -150,45 +153,117 @@ export default function Dashboard() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showSuggestions]);
 
-  // Aggregate Chart Data from todayAppointments and todayBills
   useEffect(() => {
-    const hourlyPatients: { [key: number]: number } = {};
-    todayAppointments.forEach(a => {
-      if (a.startTime) {
-        const hour = parseInt(a.startTime.split(':')[0]);
-        hourlyPatients[hour] = (hourlyPatients[hour] || 0) + 1;
+    if (!profile || profile.role === 'patient') return;
+
+    // Real-time counts
+    const unsubPatients = onSnapshot(collection(db, 'patients'), (snap) => {
+      setCounts(prev => ({ ...prev, patients: snap.size }));
+    }, (err) => console.error("Patients count error:", err));
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTS = Timestamp.fromDate(today);
+
+    // Appointments for today + list
+    const unsubApp = onSnapshot(
+      query(collection(db, 'appointments'), where('date', '>=', todayTS)),
+      (snap) => {
+        setCounts(prev => ({ ...prev, appointments: snap.size }));
+        setRecentAppointments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })).slice(0, 5));
+        
+        // Build Patients Chart Data (Hourly)
+        const hourlyPatients: { [key: number]: number } = {};
+        snap.docs.forEach(doc => {
+          const data = doc.data();
+          if (data.startTime) {
+            const hour = parseInt(data.startTime.split(':')[0]);
+            hourlyPatients[hour] = (hourlyPatients[hour] || 0) + 1;
+          }
+        });
+        
+        const trend = [8, 10, 12, 14, 16, 18, 20].map(h => ({
+          name: `${h > 12 ? h - 12 : h} ${h >= 12 ? 'PM' : 'AM'}`,
+          patients: hourlyPatients[h] || 0,
+          revenue: 0 // Will be merged from invoices
+        }));
+        
+        setChartData(prevTrend => {
+          const newTrend = [...trend];
+          // Preserve revenue if it was already fetched
+          if (prevTrend.length === newTrend.length) {
+            newTrend.forEach((item, i) => {
+              item.revenue = prevTrend[i].revenue || 0;
+            });
+          }
+          return newTrend;
+        });
+      },
+      (err) => console.error("Appointments count error:", err)
+    );
+
+    // Revenue tracking (Bills)
+    const unsubInvoices = onSnapshot(
+      query(collection(db, 'bills'), where('createdAt', '>=', todayTS)),
+      (snap) => {
+        let totalRev = 0;
+        const hourlyRev: { [key: number]: number } = {};
+        
+        snap.docs.forEach(doc => {
+          const data = doc.data();
+          const amount = data.finalAmount || data.totalAmount || data.amount || data.total || 0;
+          totalRev += amount;
+          
+          if (data.createdAt) {
+            const date = data.createdAt.toDate();
+            const hour = date.getHours();
+            hourlyRev[hour] = (hourlyRev[hour] || 0) + amount;
+          }
+        });
+        
+        setCounts(prev => ({ ...prev, revenue: totalRev }));
+        
+        setChartData(prevTrend => {
+          const baseline = [8, 10, 12, 14, 16, 18, 20];
+          return baseline.map(h => {
+            const existing = prevTrend.find(p => {
+              const hourTitle = `${h > 12 ? h - 12 : h} ${h >= 12 ? 'PM' : 'AM'}`;
+              return p.name === hourTitle;
+            });
+            return {
+              name: `${h > 12 ? h - 12 : h} ${h >= 12 ? 'PM' : 'AM'}`,
+              patients: existing?.patients || 0,
+              revenue: (hourlyRev[h] || 0) + (hourlyRev[h+1] || 0) // Group by 2-hour window to match labels
+            };
+          });
+        });
       }
-    });
+    );
 
-    const hourlyRev: { [key: number]: number } = {};
-    todayBills.forEach(b => {
-      const amount = b.finalAmount || b.totalAmount || 0;
-      if (b.createdAt) {
-        const date = toDate(b.createdAt);
-        const hour = date.getHours();
-        hourlyRev[hour] = (hourlyRev[hour] || 0) + amount;
-      }
-    });
+    const unsubPres = onSnapshot(
+      query(collection(db, 'prescriptions'), where('status', '==', 'pending')),
+      (snap) => {
+        setCounts(prev => ({ ...prev, prescriptions: snap.size }));
+      }, 
+      (err) => console.error("Prescriptions count error:", err)
+    );
 
-    const baseline = [8, 10, 12, 14, 16, 18, 20];
-    const trend = baseline.map(h => ({
-      name: `${h > 12 ? h - 12 : h} ${h >= 12 ? 'PM' : 'AM'}`,
-      patients: hourlyPatients[h] || 0,
-      revenue: (hourlyRev[h] || 0) + (hourlyRev[h+1] || 0)
-    }));
+    const unsubRad = onSnapshot(
+      query(collection(db, 'radiology_requests'), where('status', '==', 'pending')),
+      (snap) => {
+        setCounts(prev => ({ ...prev, radiology: snap.size }));
+      }, 
+      (err) => console.error("Radiology count error:", err)
+    );
 
-    setChartData(trend);
-  }, [todayAppointments, todayBills]);
-
-  const counts = {
-    patients: totalPatientCount,
-    appointments: todayAppointments.length,
-    prescriptions: pendingPrescriptionsCount,
-    radiology: pendingRadiologyCount,
-    revenue: todayBills.reduce((acc, b) => acc + (b.finalAmount || b.totalAmount || 0), 0)
-  };
-
-  const recentAppointments = todayAppointments.slice(0, 5);
+    return () => {
+      unsubPatients();
+      unsubApp();
+      unsubInvoices();
+      unsubPres();
+      unsubRad();
+    };
+  }, [profile]);
 
   const handleQuickSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -196,16 +271,24 @@ export default function Dashboard() {
 
     setIsSearching(true);
     try {
-      const patient = await localDB.patients
-        .filter(p => p.phone === quickSearch || p.name === quickSearch)
-        .first();
+      // Search by Phone or Name
+      let q = query(collection(db, 'patients'), where('phone', '==', quickSearch), limit(1));
+      let snap = await getDocs(q);
 
-      if (patient) {
+      if (snap.empty) {
+        // Try search by name (exact match for simplicity in quick search)
+        q = query(collection(db, 'patients'), where('name', '==', quickSearch), limit(1));
+        snap = await getDocs(q);
+      }
+
+      if (!snap.empty) {
+        const patient = { id: snap.docs[0].id, ...snap.docs[0].data() };
         setSearchResult(patient);
         setIsRegistering(false);
       } else {
         setSearchResult(null);
         setIsRegistering(true);
+        // Pre-fill based on input type
         const isNumeric = /^\d+$/.test(quickSearch);
         setNewPatientData({
           name: isNumeric ? '' : quickSearch,
@@ -230,14 +313,14 @@ export default function Dashboard() {
 
     setIsSubmitting(true);
     try {
-      const mrn = await DataService.getNextSequentialId('patient_mrn', 'AM-');
-      const patientData: any = {
+      const mrn = await getNextMRN();
+      const docRef = await addDoc(collection(db, 'patients'), {
         ...newPatientData,
         mrn,
-        dateOfBirth: `${new Date().getFullYear() - parseInt(newPatientData.age || '0')}-01-01`,
-      };
-      const id = await DataService.create('patients', patientData);
-      const patient = { id, ...patientData };
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      const patient = { id: docRef.id, ...newPatientData, mrn };
       setSearchResult(patient);
       setIsRegistering(false);
       toast.success(`تم تسجيل المريض بنجاح بالرقم الطبي: ${mrn}`);
@@ -249,17 +332,18 @@ export default function Dashboard() {
   };
 
   const handleQuickAppointment = async () => {
-    if (!searchResult || !profile) return;
+    if (!searchResult) return;
     try {
-      await DataService.create('appointments', {
+      await addDoc(collection(db, 'appointments'), {
         patientId: searchResult.id,
         patientName: searchResult.name,
-        doctorId: profile.uid,
-        doctorName: profile.displayName,
-        date: new Date(),
+        doctorId: profile?.uid || '',
+        doctorName: profile?.displayName || '',
+        date: Timestamp.now(),
         startTime: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
         status: 'scheduled',
         type: 'consultation',
+        createdAt: serverTimestamp()
       });
       toast.success('تم حجز موعد سريع');
       setShowQuickAction(false);

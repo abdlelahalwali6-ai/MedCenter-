@@ -30,25 +30,46 @@ export default function Radiology() {
 
   if (profile?.role === 'patient') return null;
 
-  const requests = useLiveQuery(() => localDB.radiologyRequests.orderBy('createdAt').reverse().toArray(), []) || [];
-  const patients = useLiveQuery(() => localDB.patients.orderBy('name').toArray(), []) || [];
+  const requests = useLiveQuery(() => localDB.radiologyRequests.toArray(), []) || [];
+  const patients = useLiveQuery(() => localDB.patients.toArray(), []) || [];
   const catalog = useLiveQuery(() => localDB.serviceCatalog.where('category').equals('radiology').toArray(), []) || [];
   const [searchTerm, setSearchTerm] = useState('');
   const [isCatalogDialogOpen, setIsCatalogDialogOpen] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
-  const [newItem, setNewItem] = useState({ name: '', category: 'radiology', price: 0 });
+  const [newItem, setNewItem] = useState({ name: '', category: 'X-Ray', price: 0 });
   const [newRequest, setNewRequest] = useState({ patientId: '', typeId: '' });
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scannerMode, setScannerMode] = useState<'search' | 'patient'>('search');
 
+  useEffect(() => {
+    if (!profile || profile.role === 'patient') return;
+
+    const q = query(collection(db, 'radiology_requests'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      // SyncService handles this
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'radiology_requests'));
+
+    const qCat = query(collection(db, 'radiology_catalog'), orderBy('name', 'asc'));
+    const unsubCat = onSnapshot(qCat, (snapshot) => {
+      // SyncService handles the catalog
+    });
+
+    const qPat = query(collection(db, 'patients'), orderBy('name', 'asc'));
+    const unsubPat = onSnapshot(qPat, (snapshot) => {
+      // SyncService handles this
+    });
+
+    return () => { unsub(); unsubCat(); unsubPat(); };
+  }, [profile]);
+
   const handleAddCatalogItem = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await DataService.create('serviceCatalog', { ...newItem });
+      await addDoc(collection(db, 'radiology_catalog'), { ...newItem, createdAt: serverTimestamp() });
       toast.success('تم إضافة نوع الأشعة');
       setIsCatalogDialogOpen(false);
-      setNewItem({ name: '', category: 'radiology', price: 0 });
+      setNewItem({ name: '', category: 'X-Ray', price: 0 });
     } catch (error) {
       toast.error('فشل الإضافة');
     }
@@ -58,7 +79,7 @@ export default function Radiology() {
     e.preventDefault();
     if (!editingItem) return;
     try {
-      await DataService.update('serviceCatalog', editingItem.id, { ...editingItem });
+      await updateDoc(doc(db, 'radiology_catalog', editingItem.id), { ...editingItem, updatedAt: serverTimestamp() });
       toast.success('تم التحديث');
       setEditingItem(null);
     } catch (error) {
@@ -69,7 +90,7 @@ export default function Radiology() {
   const handleDeleteCatalogItem = async (id: string) => {
     if (!window.confirm('هل أنت متأكد؟')) return;
     try {
-      await DataService.delete('serviceCatalog', id);
+      await deleteDoc(doc(db, 'radiology_catalog', id));
       toast.success('تم الحذف');
     } catch (error) {
       toast.error('فشل الحذف');

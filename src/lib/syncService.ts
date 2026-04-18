@@ -31,7 +31,7 @@ const SYNC_COLLECTIONS = [
   { name: 'serviceRequests', firestoreName: 'service_requests', patientFilter: 'patientId' },
   { name: 'serviceCatalog', firestoreName: 'services_catalog' },
   { name: 'labCatalog', firestoreName: 'lab_catalog' },
-  { name: 'profiles', firestoreName: 'users', roles: ['admin', 'doctor', 'receptionist', 'nurse', 'pharmacist', 'lab_tech', 'radiologist'] } 
+  { name: 'profiles', firestoreName: 'users', roles: ['admin'] } 
 ];
 
 export class SyncService {

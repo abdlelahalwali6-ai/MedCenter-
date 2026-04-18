@@ -57,7 +57,7 @@ export default function Pharmacy() {
   if (profile?.role === 'patient') return null;
   
   const inventory = useLiveQuery(() => localDB.inventory.toArray(), []) || [];
-  const prescriptions = useLiveQuery(() => localDB.prescriptions.orderBy('createdAt').reverse().toArray(), []) || [];
+  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -82,6 +82,14 @@ export default function Pharmacy() {
 
   useEffect(() => {
     if (!profile || profile.role === 'patient') return;
+
+    // Prescriptions (Still using Firestore for live coordination of orders)
+    const qPres = query(collection(db, 'prescriptions'), orderBy('createdAt', 'desc'));
+    const unsubPres = onSnapshot(qPres, (snapshot) => {
+      setPrescriptions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Prescription[]);
+    });
+
+    return () => { unsubPres(); };
   }, [profile]);
   
   const handleAddItem = async (e: React.FormEvent) => {

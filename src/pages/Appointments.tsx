@@ -73,8 +73,7 @@ export default function Appointments() {
 
   const appointments = useLiveQuery(() => localDB.appointments.toArray(), []) || [];
   const patients = useLiveQuery(() => localDB.patients.toArray(), []) || [];
-  const doctors = useLiveQuery(() => localDB.profiles.filter(p => p.role === 'doctor').toArray(), []) || [];
-  
+  const [doctors, setDoctors] = useState<UserProfile[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
@@ -90,6 +89,32 @@ export default function Appointments() {
     startTime: '',
     type: 'consultation' as any
   });
+
+  useEffect(() => {
+    if (!profile || profile.role === 'patient') return;
+
+    // Fetch Appointments
+    const qApp = query(collection(db, 'appointments'), orderBy('date', 'asc'));
+    const unsubApp = onSnapshot(qApp, (snapshot) => {
+      // Sync handled by SyncService
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'appointments'));
+
+    // Fetch Patients
+    const qPat = query(collection(db, 'patients'), orderBy('name', 'asc'));
+    const unsubPat = onSnapshot(qPat, (snapshot) => {
+      // Sync handled by SyncService
+    });
+
+    // Fetch Doctors
+    const qDoc = query(collection(db, 'users')); 
+    const unsubDoc = onSnapshot(qDoc, (snapshot) => {
+      setDoctors(snapshot.docs
+        .map(doc => ({ uid: doc.id, ...doc.data() }))
+        .filter((u: any) => u.role === 'doctor') as UserProfile[]);
+    });
+
+    return () => { unsubApp(); unsubPat(); unsubDoc(); };
+  }, [profile]);
 
   const handleAddAppointment = async (e: React.FormEvent) => {
     e.preventDefault();

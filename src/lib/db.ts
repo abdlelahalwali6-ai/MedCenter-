@@ -54,7 +54,7 @@ export class LocalDB extends Dexie {
       syncMetaData: 'id',
       counters: 'id',
       deletedItems: 'id, collectionName',
-      profiles: 'id, email, role'
+      profiles: 'uid, email, role'
     });
     
     // Ensure admin stub exists locally to help with initial identification
@@ -69,7 +69,6 @@ export class LocalDB extends Dexie {
       if (!existing) {
         // We use a temporary UID if we don't have one, but it will be updated during first sync/login
         await this.profiles.add({
-          id: 'admin-initial-uid',
           uid: 'admin-initial-uid', 
           email: adminEmail,
           displayName: 'مسؤول النظام (أمان)',
