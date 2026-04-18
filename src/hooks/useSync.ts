@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 
 export function useSync() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [lastSync, setLastSync] = useState<Date | null>(null);
 
@@ -15,7 +15,7 @@ export function useSync() {
         position: 'bottom-right',
         duration: 3000
       });
-      SyncService.syncAll();
+      SyncService.syncAll(profile?.role, user?.uid);
     };
 
     const handleOffline = () => {
@@ -31,13 +31,13 @@ export function useSync() {
 
     // Initial sync if online
     if (user && isOnline) {
-      SyncService.syncAll().then(() => setLastSync(new Date()));
+      SyncService.syncAll(profile?.role, user?.uid).then(() => setLastSync(new Date()));
     }
 
     // Periodic sync every 2 minutes
     const interval = setInterval(() => {
       if (user && isOnline) {
-        SyncService.syncAll().then(() => setLastSync(new Date()));
+        SyncService.syncAll(profile?.role, user?.uid).then(() => setLastSync(new Date()));
       }
     }, 120000);
 

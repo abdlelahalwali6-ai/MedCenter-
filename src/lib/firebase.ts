@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { initializeApp, deleteApp, getApp, FirebaseApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, updateProfile as authUpdateProfile } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer, runTransaction, increment } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '@/firebase-applet-config.json';
@@ -13,6 +13,33 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const storage = getStorage(app);
+
+/**
+ * Creates a new user account without logging out the current admin session.
+ * Uses a secondary app instance for creation.
+ */
+export async function createNewUser(email: string, pass: string, name: string) {
+  let secondaryApp: FirebaseApp | undefined;
+  try {
+    // Unique name for secondary app to avoid conflicts
+    const secondaryAppName = `SecondaryApp_${Date.now()}`;
+    secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+    const secondaryAuth = getAuth(secondaryApp);
+    
+    // Create the account
+    const result = await createUserWithEmailAndPassword(secondaryAuth, email, pass);
+    
+    // Set display name in auth
+    await authUpdateProfile(result.user, { displayName: name });
+    
+    return result.user.uid;
+  } finally {
+    // Always clean up the secondary app
+    if (secondaryApp) {
+      await deleteApp(secondaryApp);
+    }
+  }
+}
 
 /**
  * Generates a sequential Medical Record Number (MRN)

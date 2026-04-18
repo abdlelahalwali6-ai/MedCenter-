@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'maskable-icon.svg'],
+        includeAssets: [],
         manifest: {
           name: 'نظام أمان الطبي المتكامل',
           short_name: 'نظام أمان',
@@ -72,7 +72,7 @@ export default defineConfig(({ mode }) => {
       })
     ],
     define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY || null),
     },
     resolve: {
       alias: {

@@ -15,17 +15,17 @@ import { localDB } from './db';
 import { toast } from 'sonner';
 
 const SYNC_COLLECTIONS = [
-  { name: 'patients', firestoreName: 'patients' },
-  { name: 'inventory', firestoreName: 'inventory' },
-  { name: 'labRequests', firestoreName: 'lab_requests' },
-  { name: 'appointments', firestoreName: 'appointments' },
-  { name: 'medicalRecords', firestoreName: 'medical_records' },
-  { name: 'prescriptions', firestoreName: 'prescriptions' },
-  { name: 'radiologyRequests', firestoreName: 'radiology_requests' },
-  { name: 'bills', firestoreName: 'bills' },
+  { name: 'patients', firestoreName: 'patients', roles: ['admin', 'doctor', 'nurse', 'receptionist', 'pharmacist', 'lab_tech', 'radiologist'] },
+  { name: 'inventory', firestoreName: 'inventory', roles: ['admin', 'doctor', 'nurse', 'pharmacist', 'receptionist'] },
+  { name: 'labRequests', firestoreName: 'lab_requests', patientFilter: 'patientId' },
+  { name: 'appointments', firestoreName: 'appointments', patientFilter: 'patientId' },
+  { name: 'medicalRecords', firestoreName: 'medical_records', patientFilter: 'patientId' },
+  { name: 'prescriptions', firestoreName: 'prescriptions', patientFilter: 'patientId' },
+  { name: 'radiologyRequests', firestoreName: 'radiology_requests', patientFilter: 'patientId' },
+  { name: 'bills', firestoreName: 'bills', patientFilter: 'patientId' },
   { name: 'messages', firestoreName: 'messages' },
-  { name: 'auditLogs', firestoreName: 'audit_logs' },
-  { name: 'serviceRequests', firestoreName: 'service_requests' },
+  { name: 'auditLogs', firestoreName: 'audit_logs', roles: ['admin', 'doctor', 'receptionist'] },
+  { name: 'serviceRequests', firestoreName: 'service_requests', patientFilter: 'patientId' },
   { name: 'serviceCatalog', firestoreName: 'services_catalog' },
   { name: 'labCatalog', firestoreName: 'lab_catalog' }
 ];
@@ -33,7 +33,7 @@ const SYNC_COLLECTIONS = [
 export class SyncService {
   private static isSyncing = false;
 
-  static async syncAll() {
+  static async syncAll(userRole?: string, userId?: string) {
     if (this.isSyncing) return;
     if (!auth.currentUser) return;
 
@@ -44,9 +44,16 @@ export class SyncService {
       // 1. First sync deletions (to clean up Firestore)
       await this.syncDeletions();
 
-      for (const col of SYNC_COLLECTIONS) {
+      for (const col of SYNC_COLLECTIONS as any[]) {
         try {
-          await this.syncCollection(col.name, col.firestoreName);
+          // If a collection has specific roles, verify permission before syncing
+          if (col.roles) {
+            if (!userRole || !col.roles.includes(userRole)) {
+              console.log(`[Sync] Skipping collection ${col.name}: userRole ${userRole || 'missing'} is not authorized.`);
+              continue;
+            }
+          }
+          await this.syncCollection(col.name, col.firestoreName, userRole, userId, col.patientFilter);
         } catch (error) {
           console.error(`[Sync] Failed to sync collection ${col.name}:`, error);
           // Continue with next collection
@@ -81,7 +88,7 @@ export class SyncService {
     await localDB.deletedItems.clear();
   }
 
-  private static async syncCollection(localName: string, firestoreName: string) {
+  private static async syncCollection(localName: string, firestoreName: string, userRole?: string, userId?: string, patientFilter?: string) {
     const meta = await localDB.syncMetaData.get(localName);
     const lastSynced = meta?.lastSynced || 0;
     const now = Date.now();
@@ -91,7 +98,7 @@ export class SyncService {
       await this.pushLocalChanges(localName, firestoreName, lastSynced);
 
       // 2. Pull remote changes (Items updated in Firestore since last sync)
-      await this.pullRemoteChanges(localName, firestoreName, lastSynced);
+      await this.pullRemoteChanges(localName, firestoreName, lastSynced, userRole, userId, patientFilter);
 
       // 3. Update sync metadata
       await localDB.syncMetaData.put({ id: localName, lastSynced: now });
@@ -135,15 +142,27 @@ export class SyncService {
     }
   }
 
-  private static async pullRemoteChanges(localName: string, firestoreName: string, lastSynced: number) {
+  private static async pullRemoteChanges(localName: string, firestoreName: string, lastSynced: number, userRole?: string, userId?: string, patientFilter?: string) {
     const table = (localDB as any)[localName];
     const lastSyncedDate = new Date(lastSynced);
     
-    const q = query(
-      collection(db, firestoreName),
+    let constraints = [
       where('updatedAt', '>', Timestamp.fromDate(lastSyncedDate)),
       orderBy('updatedAt', 'asc'),
       limit(1000)
+    ];
+
+    // If it's a patient, and the collection supports patient filtering, apply it
+    if (userRole === 'patient' && patientFilter && userId) {
+      constraints = [
+        where(patientFilter, '==', userId),
+        ...constraints
+      ];
+    }
+
+    const q = query(
+      collection(db, firestoreName),
+      ...constraints
     );
 
     const snapshot = await getDocs(q);

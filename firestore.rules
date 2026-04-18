@@ -50,7 +50,12 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{uid} {
-      allow read: if isSignedIn();
+      // Allow unauthenticated lookup for login (name/phone to email resolution)
+      // We restrict list to a single document for unauthenticated users
+      allow list: if isStaff() || (!isSignedIn() && request.query.limit <= 1);
+      // Only the user themselves or staff can get the full profile
+      allow get: if isSignedIn() && (request.auth.uid == uid || isStaff());
+      
       allow create: if isSignedIn() && (isAdmin() || (uid == request.auth.uid && incoming().role == 'patient'));
       allow update: if isSignedIn() && (isAdmin() || uid == request.auth.uid);
       allow delete: if isAdmin();
@@ -114,7 +119,7 @@ service cloud.firestore {
     }
 
     match /inventory/{id} {
-      allow read: if isStaff();
+      allow read: if isSignedIn();
       allow write: if isAdmin() || (isStaff() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "pharmacist");
     }
 
