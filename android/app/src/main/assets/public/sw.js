@@ -79,7 +79,7 @@ define(['./workbox-ca84f546'], (function (workbox) { 'use strict';
    */
   workbox.precacheAndRoute([{
     "url": "index.html",
-    "revision": "b48b5f412db75409ed157253c3c0fcf3"
+    "revision": "c2c09d03070c521709f0b5922218d846"
   }, {
     "url": "assets/workbox-window.prod.es5-BIl4cyR9.js",
     "revision": null
@@ -90,7 +90,7 @@ define(['./workbox-ca84f546'], (function (workbox) { 'use strict';
     "url": "assets/vendor-react-CWzAdjiE.js",
     "revision": null
   }, {
-    "url": "assets/vendor-firebase-Ckoi0oR6.js",
+    "url": "assets/vendor-firebase-CAFwYYEf.js",
     "revision": null
   }, {
     "url": "assets/vendor-db-qlHQlgqb.js",
@@ -99,22 +99,22 @@ define(['./workbox-ca84f546'], (function (workbox) { 'use strict';
     "url": "assets/vendor-charts-QSlfisd8.js",
     "revision": null
   }, {
-    "url": "assets/useCompositeListItem-6udQbvd2.js",
+    "url": "assets/useCompositeListItem-BZ3gGLGt.js",
     "revision": null
   }, {
-    "url": "assets/textarea-DEcwS0tg.js",
+    "url": "assets/textarea-ynMcmBvw.js",
     "revision": null
   }, {
-    "url": "assets/tabs-DPC-rQmk.js",
+    "url": "assets/tabs-C3FtN5xO.js",
     "revision": null
   }, {
-    "url": "assets/table-CFSldpB0.js",
+    "url": "assets/table-CAODndMi.js",
     "revision": null
   }, {
-    "url": "assets/select-CYoEjsSY.js",
+    "url": "assets/select-CeR7bnVh.js",
     "revision": null
   }, {
-    "url": "assets/scroll-area-DuUc7V_J.js",
+    "url": "assets/scroll-area-D-RhUgzz.js",
     "revision": null
   }, {
     "url": "assets/react-barcode-DySeKCT-.js",
@@ -123,110 +123,113 @@ define(['./workbox-ca84f546'], (function (workbox) { 'use strict';
     "url": "assets/purify.es-B5CD4DQe.js",
     "revision": null
   }, {
-    "url": "assets/proxy-DvVkfIQP.js",
+    "url": "assets/proxy-BQemBZfQ.js",
     "revision": null
   }, {
-    "url": "assets/label-Bed42atz.js",
+    "url": "assets/label-B7cZtqr_.js",
     "revision": null
   }, {
-    "url": "assets/index.es-DnQM7aJ4.js",
+    "url": "assets/index.es-BMFEhA_8.js",
     "revision": null
   }, {
-    "url": "assets/index-DnUOZMs8.js",
+    "url": "assets/index-DKpf6rFO.css",
     "revision": null
   }, {
-    "url": "assets/index-Bks6-1Rf.css",
+    "url": "assets/index-CceueNc7.js",
     "revision": null
   }, {
     "url": "assets/html2canvas.esm-QH1iLAAe.js",
     "revision": null
   }, {
-    "url": "assets/dialog-DZ0kzDgf.js",
+    "url": "assets/dialog-CMhThjU6.js",
     "revision": null
   }, {
-    "url": "assets/dateUtils-ZG2AB3Sa.js",
+    "url": "assets/dateUtils-C5l4hMhX.js",
+    "revision": null
+  }, {
+    "url": "assets/dataService-CQ3ymhTO.js",
     "revision": null
   }, {
     "url": "assets/constants-3JJP6fUD.js",
     "revision": null
   }, {
-    "url": "assets/card-CfyCm5FT.js",
+    "url": "assets/card-D1TmAPZE.js",
     "revision": null
   }, {
-    "url": "assets/badge-Dg0Wr9OW.js",
+    "url": "assets/badge-DAJCk6hE.js",
     "revision": null
   }, {
-    "url": "assets/audit-BJrWzGUH.js",
+    "url": "assets/audit-CSqVtFHp.js",
     "revision": null
   }, {
-    "url": "assets/Settings-DroOG8Ue.js",
+    "url": "assets/Settings-BnN-YtEQ.js",
     "revision": null
   }, {
-    "url": "assets/Services-BRDoyue6.js",
+    "url": "assets/Services-DfCmFoMd.js",
     "revision": null
   }, {
-    "url": "assets/Reports-D3EpOe23.js",
+    "url": "assets/Reports-CPGmhCtY.js",
     "revision": null
   }, {
-    "url": "assets/Records-DqOvzt5E.js",
+    "url": "assets/Records-QEdDIQ_H.js",
     "revision": null
   }, {
-    "url": "assets/Radiology-Cjd3K3Np.js",
+    "url": "assets/Radiology-_OHMqXOx.js",
     "revision": null
   }, {
-    "url": "assets/Profile-B6A82TOR.js",
+    "url": "assets/Profile-TjniM65_.js",
     "revision": null
   }, {
-    "url": "assets/Pharmacy-DB7tt7FL.js",
+    "url": "assets/Pharmacy-BOPQ75i9.js",
     "revision": null
   }, {
-    "url": "assets/Patients-Df69R-Lo.js",
+    "url": "assets/Patients-iK_qXwqH.js",
     "revision": null
   }, {
-    "url": "assets/Messages-DiGsB7yZ.js",
+    "url": "assets/Messages-DZGFpvCW.js",
     "revision": null
   }, {
-    "url": "assets/Login-BZR1OdHt.js",
+    "url": "assets/Login-LXttJBc7.js",
     "revision": null
   }, {
-    "url": "assets/Lab-DyP67U46.js",
+    "url": "assets/Lab-0JSnSUvS.js",
     "revision": null
   }, {
-    "url": "assets/HR-DCz1f77I.js",
+    "url": "assets/HR-D6eOzxUn.js",
     "revision": null
   }, {
-    "url": "assets/Doctors-vy_dL8_Y.js",
+    "url": "assets/Doctors-PoxCMsXr.js",
     "revision": null
   }, {
-    "url": "assets/Dashboard-DgX-1fsY.js",
+    "url": "assets/Dashboard-BZZ756tL.js",
     "revision": null
   }, {
-    "url": "assets/Dashboard-CU_l8foJ.js",
+    "url": "assets/Dashboard-BNu-grEB.js",
     "revision": null
   }, {
-    "url": "assets/Clinic-Clp3ptq5.js",
+    "url": "assets/Clinic-CJmFSqLc.js",
     "revision": null
   }, {
-    "url": "assets/CSPContext-ON1TvfDk.js",
+    "url": "assets/CSPContext-BOTUEiJi.js",
     "revision": null
   }, {
-    "url": "assets/Billing-CVSiv1Nn.js",
+    "url": "assets/Billing-CTF0_mGn.js",
     "revision": null
   }, {
-    "url": "assets/BarcodeScanner-CGN1ZdWO.js",
+    "url": "assets/BarcodeScanner-CCibtlZa.js",
     "revision": null
   }, {
-    "url": "assets/AuditLogs-PvO-VKt2.js",
+    "url": "assets/AuditLogs-CzTZZ-Ut.js",
     "revision": null
   }, {
-    "url": "assets/Appointments-CHox9b_V.js",
+    "url": "assets/Appointments-Cf73a1FW.js",
     "revision": null
   }, {
-    "url": "assets/Appointments-C2QOK-uK.js",
+    "url": "assets/Appointments-CFFSlZTj.js",
     "revision": null
   }, {
     "url": "manifest.webmanifest",
-    "revision": "f05599f987be3f8719fcd2ce65e31e23"
+    "revision": "e79345eab6a79271724341d8c45c03d6"
   }], {});
   workbox.cleanupOutdatedCaches();
   workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("index.html")));

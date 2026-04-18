@@ -19,9 +19,9 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'maskable-icon.svg'],
         manifest: {
-          name: 'مركز رعاية المريض',
-          short_name: 'رعاية المريض',
-          description: 'نظام إدارة مركز طبي متكامل وشامل لخدمة المرضى والأطباء والموظفين',
+          name: 'نظام أمان الطبي المتكامل',
+          short_name: 'نظام أمان',
+          description: 'نظام إدارة طبي احترافي يعمل بدون إنترنت مع مزامنة سحابية كاملة',
           theme_color: '#0ea5e9',
           background_color: '#ffffff',
           display: 'standalone',

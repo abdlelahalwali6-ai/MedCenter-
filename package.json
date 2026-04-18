@@ -9,7 +9,9 @@
     "deploy": "npm run build && npx firebase-tools deploy --only hosting",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "android:sync": "npm run build && npx cap sync android",
+    "android:open": "npx cap open android"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",
