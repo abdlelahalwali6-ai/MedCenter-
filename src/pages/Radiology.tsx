@@ -6,6 +6,9 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, orderBy, updateDoc, deleteDoc, doc, serverTimestamp, addDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
+import { localDB } from '@/src/lib/db';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { DataService } from '@/src/lib/dataService';
 import { formatArabicDate } from '@/src/lib/dateUtils';
 import { logAction } from '@/src/lib/audit';
 import { RadiologyRequest, Patient } from '@/src/types';
@@ -27,9 +30,9 @@ export default function Radiology() {
 
   if (profile?.role === 'patient') return null;
 
-  const [requests, setRequests] = useState<RadiologyRequest[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [catalog, setCatalog] = useState<any[]>([]);
+  const requests = useLiveQuery(() => localDB.radiologyRequests.toArray(), []) || [];
+  const patients = useLiveQuery(() => localDB.patients.toArray(), []) || [];
+  const catalog = useLiveQuery(() => localDB.serviceCatalog.where('category').equals('radiology').toArray(), []) || [];
   const [searchTerm, setSearchTerm] = useState('');
   const [isCatalogDialogOpen, setIsCatalogDialogOpen] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -44,17 +47,17 @@ export default function Radiology() {
 
     const q = query(collection(db, 'radiology_requests'), orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(q, (snapshot) => {
-      setRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as RadiologyRequest[]);
+      // SyncService handles this
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'radiology_requests'));
 
     const qCat = query(collection(db, 'radiology_catalog'), orderBy('name', 'asc'));
     const unsubCat = onSnapshot(qCat, (snapshot) => {
-      setCatalog(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      // SyncService handles the catalog
     });
 
     const qPat = query(collection(db, 'patients'), orderBy('name', 'asc'));
     const unsubPat = onSnapshot(qPat, (snapshot) => {
-      setPatients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Patient[]);
+      // SyncService handles this
     });
 
     return () => { unsub(); unsubCat(); unsubPat(); };
@@ -104,34 +107,39 @@ export default function Radiology() {
     }
 
     try {
-      const docRef = await addDoc(collection(db, 'radiology_requests'), {
+      const requestId = await DataService.create('radiologyRequests', {
         patientId: patient.id,
         patientName: patient.name,
         doctorId: profile?.uid || '',
         doctorName: profile?.displayName || '',
         type: type.name,
-        status: 'pending',
-        createdAt: serverTimestamp()
+        status: 'pending'
       });
 
       await logAction(
         profile,
         'إنشاء طلب أشعة',
         'radiology',
-        docRef.id,
+        requestId,
         `طلب أشعة (${type.name}) للمريض: ${patient.name}`
       );
 
       // Create a bill
       if (type.price > 0) {
-        await addDoc(collection(db, 'bills'), {
+        await DataService.create('bills', {
           patientId: patient.id,
           patientName: patient.name,
-          amount: type.price,
+          totalAmount: type.price,
+          finalAmount: type.price,
+          paidAmount: 0,
           description: `أشعة: ${type.name}`,
           status: 'pending',
           type: 'radiology',
-          createdAt: serverTimestamp()
+          items: [{
+            description: type.name,
+            amount: type.price,
+            quantity: 1
+          }]
         });
       }
 
@@ -144,9 +152,8 @@ export default function Radiology() {
   };
   const handleUpdateStatus = async (requestId: string, newStatus: string) => {
     try {
-      await updateDoc(doc(db, 'radiology_requests', requestId), {
-        status: newStatus,
-        updatedAt: serverTimestamp()
+      await DataService.update('radiologyRequests', requestId, {
+        status: newStatus
       });
 
       await logAction(
@@ -166,7 +173,7 @@ export default function Radiology() {
   const handleDeleteRequest = async (id: string) => {
     if (!window.confirm('هل أنت متأكد من حذف هذا الطلب؟')) return;
     try {
-      await deleteDoc(doc(db, 'radiology_requests', id));
+      await DataService.delete('radiologyRequests', id);
       toast.success('تم حذف الطلب');
     } catch (error) {
       toast.error('فشل حذف الطلب');

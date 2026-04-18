@@ -7,6 +7,9 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { collection, query, onSnapshot, orderBy, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, where } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
+import { localDB } from '@/src/lib/db';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { DataService } from '@/src/lib/dataService';
 import { formatArabicDate, toDate } from '@/src/lib/dateUtils';
 import { logAction } from '@/src/lib/audit';
 import { Bill, Patient, ServiceCatalogItem, ServiceRequest, BillItem, UserProfile } from '@/src/types';
@@ -34,11 +37,11 @@ export default function Billing() {
 
   if (profile?.role === 'patient') return null;
 
-  const [bills, setBills] = useState<Bill[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
+  const bills = useLiveQuery(() => localDB.bills.toArray(), []) || [];
+  const patients = useLiveQuery(() => localDB.patients.toArray(), []) || [];
+  const serviceRequests = useLiveQuery(() => localDB.serviceRequests.toArray(), []) || [];
+  const servicesCatalog = useLiveQuery(() => localDB.serviceCatalog.toArray(), []) || [];
   const [doctors, setDoctors] = useState<UserProfile[]>([]);
-  const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
-  const [servicesCatalog, setServicesCatalog] = useState<ServiceCatalogItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
@@ -72,29 +75,23 @@ export default function Billing() {
 
     const q = query(collection(db, 'bills'), orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(q, (snapshot) => {
-      setBills(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Bill[]);
+      // Data updated by SyncService, useLiveQuery handles the UI
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'bills'));
 
     const qPat = query(collection(db, 'patients'), orderBy('name', 'asc'));
     const unsubPat = onSnapshot(qPat, (snapshot) => {
-      const patientsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Patient[];
-      setPatients(patientsData);
-      
       if (patientIdFromUrl) {
-        const patient = patientsData.find(p => p.id === patientIdFromUrl);
-        if (patient) {
-          setNewBill(prev => ({ ...prev, patientId: patient.id }));
-          setIsAddDialogOpen(true);
-        }
+        setNewBill(prev => ({ ...prev, patientId: patientIdFromUrl }));
+        setIsAddDialogOpen(true);
       }
     });
 
     const unsubRequests = onSnapshot(query(collection(db, 'service_requests'), orderBy('createdAt', 'desc')), (snap) => {
-      setServiceRequests(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ServiceRequest[]);
+      // SyncService handles this
     });
 
     const unsubCatalog = onSnapshot(collection(db, 'services_catalog'), (snap) => {
-      setServicesCatalog(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ServiceCatalogItem[]);
+      // SyncService handles this
     });
 
     const unsubDoc = onSnapshot(query(collection(db, 'users')), (snapshot) => {
@@ -118,7 +115,7 @@ export default function Billing() {
     const doctor = doctors.find(d => d.uid === newBill.doctorId);
 
     try {
-      const billRef = await addDoc(collection(db, 'bills'), {
+      const billId = await DataService.create('bills', {
         patientId: patient.id,
         patientName: patient.name,
         doctorId: doctor?.uid || null,
@@ -134,21 +131,21 @@ export default function Billing() {
         paymentMethod: newBill.paymentMethod,
         insuranceProvider: newBill.insuranceProvider,
         insuranceCoverage: newBill.insuranceCoverage,
-        status: 'unpaid',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        status: 'unpaid'
       });
 
       await logAction(
         profile,
         'إنشاء فاتورة',
         'bill',
-        billRef.id,
+        billId,
         `تم إنشاء فاتورة للمريض: ${patient.name} بمبلغ ${finalAmount} ر.ي`
       );
 
       if (newBill.requestId) {
-        await updateDoc(doc(db, 'service_requests', newBill.requestId), {
+        // Find which type of request it was and update it
+        // We now have a serviceRequests table
+        await DataService.update('serviceRequests', newBill.requestId, {
           billed: true,
           status: 'completed'
         });
@@ -225,10 +222,9 @@ export default function Billing() {
     }
 
     try {
-      await updateDoc(doc(db, 'bills', billId), {
+      await DataService.update('bills', billId, {
         paidAmount: newPaidAmount,
-        status: status,
-        updatedAt: serverTimestamp()
+        status: status
       });
 
       await logAction(
@@ -247,7 +243,7 @@ export default function Billing() {
 
   const handleCompleteRequest = async (requestId: string) => {
     try {
-      await updateDoc(doc(db, 'service_requests', requestId), {
+      await DataService.update('serviceRequests', requestId, {
         status: 'completed'
       });
       toast.success('تم إكمال الخدمة');
@@ -259,7 +255,7 @@ export default function Billing() {
   const handleDeleteBill = async (id: string) => {
     if (!window.confirm('هل أنت متأكد من حذف هذه الفاتورة؟')) return;
     try {
-      await deleteDoc(doc(db, 'bills', id));
+      await DataService.delete('bills', id);
       toast.success('تم حذف الفاتورة');
     } catch (error) {
       toast.error('فشل حذف الفاتورة');

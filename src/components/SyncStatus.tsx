@@ -10,7 +10,6 @@ export function SyncStatus() {
   
   const patientCount = useLiveQuery(() => localDB.patients.count());
   const inventoryCount = useLiveQuery(() => localDB.inventory.count());
-  const pendingCount = useLiveQuery(() => localDB.syncOutbox.count()) || 0;
 
   useEffect(() => {
     const online = () => setIsOnline(true);
@@ -45,11 +44,6 @@ export function SyncStatus() {
         <Database size={14} className="text-primary" />
         <span className="text-[0.7rem] font-medium">
           {patientCount || 0} مرضى | {inventoryCount || 0} أصناف
-          {pendingCount > 0 && (
-            <span className="mr-2 text-amber-600 font-bold animate-pulse">
-              ({pendingCount} معلقة)
-            </span>
-          )}
         </span>
       </div>
 

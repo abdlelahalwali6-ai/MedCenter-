@@ -18,6 +18,9 @@ import {
   where
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
+import { localDB } from '@/src/lib/db';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { DataService } from '@/src/lib/dataService';
 import { formatArabicDate, toDate } from '@/src/lib/dateUtils';
 import { Appointment, Patient, UserProfile } from '@/src/types';
 import { Button } from '@/components/ui/button';
@@ -68,8 +71,8 @@ export default function Appointments() {
 
   if (profile?.role === 'patient') return null;
 
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
+  const appointments = useLiveQuery(() => localDB.appointments.toArray(), []) || [];
+  const patients = useLiveQuery(() => localDB.patients.toArray(), []) || [];
   const [doctors, setDoctors] = useState<UserProfile[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -93,13 +96,13 @@ export default function Appointments() {
     // Fetch Appointments
     const qApp = query(collection(db, 'appointments'), orderBy('date', 'asc'));
     const unsubApp = onSnapshot(qApp, (snapshot) => {
-      setAppointments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Appointment[]);
+      // Sync handled by SyncService
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'appointments'));
 
     // Fetch Patients
     const qPat = query(collection(db, 'patients'), orderBy('name', 'asc'));
     const unsubPat = onSnapshot(qPat, (snapshot) => {
-      setPatients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Patient[]);
+      // Sync handled by SyncService
     });
 
     // Fetch Doctors
@@ -121,16 +124,15 @@ export default function Appointments() {
     if (!patient || !doctor) return;
 
     try {
-      await addDoc(collection(db, 'appointments'), {
+      await DataService.create('appointments', {
         patientId: patient.id,
         patientName: patient.name,
         doctorId: doctor.uid,
         doctorName: doctor.displayName,
-        date: Timestamp.fromDate(new Date(newAppointment.date)),
+        date: new Date(newAppointment.date),
         startTime: newAppointment.startTime,
         status: 'scheduled',
         type: newAppointment.type,
-        createdAt: serverTimestamp()
       });
       toast.success('تم حجز الموعد بنجاح');
       setIsAddDialogOpen(false);
@@ -144,11 +146,9 @@ export default function Appointments() {
     e.preventDefault();
     if (!selectedAppointment) return;
     try {
-      const appRef = doc(db, 'appointments', selectedAppointment.id);
-      await updateDoc(appRef, {
+      await DataService.update('appointments', selectedAppointment.id, {
         ...selectedAppointment,
-        date: selectedAppointment.date instanceof Date ? Timestamp.fromDate(selectedAppointment.date) : selectedAppointment.date,
-        updatedAt: serverTimestamp()
+        date: selectedAppointment.date instanceof Date ? selectedAppointment.date : selectedAppointment.date
       });
       toast.success('تم تحديث الموعد');
       setIsEditDialogOpen(false);
@@ -159,15 +159,16 @@ export default function Appointments() {
 
   const handleQuickStatusChange = async (id: string, status: string) => {
     try {
-      await updateDoc(doc(db, 'appointments', id), {
-        status,
-        updatedAt: serverTimestamp()
+      await DataService.update('appointments', id, {
+        status
       });
       toast.success('تم تحديث حالة الموعد');
     } catch (error) {
       toast.error('فشل التحديث');
     }
   };
+
+// ... inside getStats ...
 
   const getStats = () => {
     const today = new Date().toISOString().split('T')[0];
@@ -187,9 +188,8 @@ export default function Appointments() {
 
   const handleCancelAppointment = async (id: string) => {
     try {
-      await updateDoc(doc(db, 'appointments', id), {
-        status: 'cancelled',
-        updatedAt: serverTimestamp()
+      await DataService.update('appointments', id, {
+        status: 'cancelled'
       });
       toast.success('تم إلغاء الموعد');
     } catch (error) {
@@ -199,7 +199,7 @@ export default function Appointments() {
 
   const handleDeleteAppointment = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'appointments', id));
+      await DataService.delete('appointments', id);
       toast.success('تم حذف الموعد نهائياً');
     } catch (error) {
       toast.error('فشل حذف الموعد');

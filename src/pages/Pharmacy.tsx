@@ -6,13 +6,12 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, orderBy, updateDoc, deleteDoc, doc, serverTimestamp, where, addDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
+import { DataService } from '@/src/lib/dataService';
 import { formatArabicDate } from '@/src/lib/dateUtils';
 import { localDB } from '@/src/lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { logAction } from '@/src/lib/audit';
 import { InventoryItem, Prescription } from '@/src/types';
-import { addToOutbox } from '@/src/lib/syncService';
-import { v4 as uuidv4 } from 'uuid';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -92,7 +91,7 @@ export default function Pharmacy() {
 
     return () => { unsubPres(); };
   }, [profile]);
-
+  
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItem.name || !newItem.scientificName) {
@@ -100,27 +99,20 @@ export default function Pharmacy() {
       return;
     }
     try {
-      const itemId = uuidv4();
       const itemData = {
         ...newItem,
-        id: itemId,
         quantity: Number(newItem.quantity) || 0,
         price: Number(newItem.price) || 0,
         minThreshold: Number(newItem.minThreshold) || 10,
-        updatedAt: new Date().toISOString()
       };
 
-      // 1. Save locally
-      await localDB.inventory.add(itemData as InventoryItem);
-
-      // 2. Add to outbox
-      await addToOutbox('create', 'inventory', itemId, itemData);
+      const id = await DataService.create('inventory', itemData);
 
       await logAction(
         profile,
         'إضافة صنف للمخزون',
         'inventory',
-        itemId,
+        id,
         `تم إضافة ${newItem.name} (${newItem.scientificName}) للمخزون`
       );
 
@@ -128,7 +120,6 @@ export default function Pharmacy() {
       setIsAddDialogOpen(false);
       setNewItem({ name: '', scientificName: '', commercialName: '', category: 'medication', quantity: 0, price: 0, unit: 'علبة', barcode: '', minThreshold: 10 });
     } catch (error) {
-      console.error('Error adding item:', error);
       toast.error('فشل إضافة الصنف');
     }
   };
@@ -138,14 +129,12 @@ export default function Pharmacy() {
     const loadingToast = toast.loading('جاري إضافة الأصناف الشائعة...');
     try {
       for (const drug of COMMON_DRUGS) {
-        // Check if already exists by barcode
         const existing = inventory.find(i => i.barcode === drug.barcode);
         if (!existing) {
-          await addDoc(collection(db, 'inventory'), {
+          await DataService.create('inventory', {
             ...drug,
             quantity: 50,
-            minThreshold: 10,
-            updatedAt: serverTimestamp()
+            minThreshold: 10
           });
         }
       }
@@ -183,9 +172,6 @@ export default function Pharmacy() {
       } else {
         toast.error('لم يتم العثور على الصنف');
       }
-      // Keep scanner open for more items if they like? 
-      // User said "seamless", so maybe auto-close after scan but provide "continue" option or just close.
-      // Usually POS scanners stay open. But for mobile camera, one scan is safer to avoid duplicates.
       setIsScannerOpen(false);
     }
   };
@@ -215,28 +201,33 @@ export default function Pharmacy() {
     if (cart.length === 0) return;
     try {
       const billData = {
-        amount: totalCartPrice,
-        description: `بيع أدوية: ${cart.map(c => c.item.name).join(', ')}`,
+        patientId: '', // Direct sale might not have patient ID
         patientName: posPatient || 'زبون نقدي',
-        status: 'pending',
+        totalAmount: totalCartPrice,
+        finalAmount: totalCartPrice,
+        paidAmount: totalCartPrice,
+        status: 'paid',
         type: 'pharmacy',
-        createdAt: serverTimestamp()
+        items: cart.map(c => ({
+          description: c.item.name,
+          amount: c.item.price,
+          quantity: c.qty
+        }))
       };
 
-      const billRef = await addDoc(collection(db, 'bills'), billData);
+      const billId = await DataService.create('bills', billData);
 
       for (const entry of cart) {
-        await updateDoc(doc(db, 'inventory', entry.item.id), {
-          quantity: Math.max(0, entry.item.quantity - entry.qty),
-          updatedAt: serverTimestamp()
+        await DataService.update('inventory', entry.item.id, {
+          quantity: Math.max(0, entry.item.quantity - entry.qty)
         });
       }
 
       await logAction(
         profile,
         'عملية بيع أدوية',
-        'inventory',
-        billRef.id,
+        'bill',
+        billId,
         `عملية بيع بقيمة ${totalCartPrice} ر.ي لـ ${posPatient || 'زبون نقدي'}`
       );
 
@@ -251,10 +242,7 @@ export default function Pharmacy() {
     e.preventDefault();
     if (!selectedItem) return;
     try {
-      await updateDoc(doc(db, 'inventory', selectedItem.id), {
-        ...selectedItem,
-        updatedAt: serverTimestamp()
-      });
+      await DataService.update('inventory', selectedItem.id, selectedItem);
       toast.success('تم تحديث بيانات الصنف');
       setIsEditDialogOpen(false);
     } catch (error) {
@@ -265,7 +253,7 @@ export default function Pharmacy() {
   const handleDeleteItem = async (id: string) => {
     if (!window.confirm('هل أنت متأكد من حذف هذا الصنف؟')) return;
     try {
-      await deleteDoc(doc(db, 'inventory', id));
+      await DataService.delete('inventory', id);
       toast.success('تم حذف الصنف من المخزون');
     } catch (error) {
       toast.error('فشل حذف الصنف');
@@ -277,7 +265,6 @@ export default function Pharmacy() {
     if (!prescription) return;
 
     try {
-      // Calculate total price
       let totalPrice = 0;
       const dispensedMeds: string[] = [];
 
@@ -287,38 +274,30 @@ export default function Pharmacy() {
           totalPrice += invItem.price || 0;
           dispensedMeds.push(med.name);
           
-          // Deduct from inventory
-          await updateDoc(doc(db, 'inventory', invItem.id), {
-            quantity: Math.max(0, invItem.quantity - 1), // Assuming 1 unit per prescription item for simplicity
-            updatedAt: serverTimestamp()
+          await DataService.update('inventory', invItem.id, {
+            quantity: Math.max(0, invItem.quantity - 1)
           });
         }
       }
 
-      // Update prescription status
-      await updateDoc(doc(db, 'prescriptions', prescriptionId), {
-        status: 'dispensed',
-        updatedAt: serverTimestamp()
+      await DataService.update('prescriptions', prescriptionId, {
+        status: 'dispensed'
       });
 
-      await logAction(
-        profile,
-        'صرف وصفة طبية',
-        'prescription',
-        prescriptionId,
-        `تم صرف الأدوية للمريض: ${prescription.patientName}`
-      );
-
-      // Create a bill
       if (totalPrice > 0) {
-        await addDoc(collection(db, 'bills'), {
+        await DataService.create('bills', {
           patientId: prescription.patientId,
           patientName: prescription.patientName,
-          amount: totalPrice,
-          description: `صرف أدوية: ${dispensedMeds.join(', ')}`,
+          totalAmount: totalPrice,
+          finalAmount: totalPrice,
+          paidAmount: 0,
           status: 'pending',
           type: 'pharmacy',
-          createdAt: serverTimestamp()
+          items: dispensedMeds.map(name => ({
+            description: `دواء: ${name}`,
+            amount: inventory.find(i => i.name === name)?.price || 0,
+            quantity: 1
+          }))
         });
       }
 

@@ -16,13 +16,12 @@ import {
   orderBy,
   Timestamp
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType, getNextMRN } from '@/src/lib/firebase';
+import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
+import { DataService } from '@/src/lib/dataService';
 import { formatArabicDate, toDate } from '@/src/lib/dateUtils';
 import { localDB } from '@/src/lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { logAction } from '@/src/lib/audit';
-import { addToOutbox } from '@/src/lib/syncService';
-import { v4 as uuidv4 } from 'uuid';
 import { Patient } from '@/src/types';
 import { 
   Table, 
@@ -114,37 +113,24 @@ export default function Patients() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const mrn = await getNextMRN();
+      const mrn = await DataService.getNextSequentialId('patient_mrn', 'AM-');
       
-      // Calculate DOB from Age (Current Year - Age)
-      const currentYear = new Date().getFullYear();
-      const dobYear = currentYear - parseInt(newPatient.age);
-      const calculatedDOB = `${dobYear}-01-01`;
-
-      const patientId = uuidv4();
-      const patientData = {
-        id: patientId,
+      const patientData: Partial<Patient> = {
         name: newPatient.name,
         phone: newPatient.phone,
-        gender: newPatient.gender,
+        gender: newPatient.gender as 'male' | 'female',
         bloodType: newPatient.bloodType,
-        dateOfBirth: calculatedDOB,
+        dateOfBirth: `${new Date().getFullYear() - parseInt(newPatient.age)}-01-01`,
         mrn,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
       };
 
-      // 1. Save locally first
-      await localDB.patients.add(patientData);
-
-      // 2. Add to outbox for sync
-      await addToOutbox('create', 'patients', patientId, patientData);
+      await DataService.create('patients', patientData);
       
       await logAction(
         profile,
         'إنشاء مريض جديد',
         'patient',
-        patientId,
+        mrn,
         `تم تسجيل مريض جديد: ${newPatient.name} (MRN: ${mrn})`
       );
 
@@ -152,7 +138,7 @@ export default function Patients() {
       setIsAddDialogOpen(false);
       setNewPatient({ name: '', phone: '', age: '', gender: 'male', bloodType: '' });
     } catch (error) {
-      console.error('Error adding patient:', error);
+      console.error(error);
       toast.error('فشل إضافة المريض');
     } finally {
       setIsSubmitting(false);
@@ -163,16 +149,7 @@ export default function Patients() {
     e.preventDefault();
     if (!selectedPatient) return;
     try {
-      const updatedData = {
-        ...selectedPatient,
-        updatedAt: new Date().toISOString()
-      };
-
-      // 1. Update locally
-      await localDB.patients.put(updatedData);
-
-      // 2. Add to outbox
-      await addToOutbox('update', 'patients', selectedPatient.id, updatedData);
+      await DataService.update('patients', selectedPatient.id, selectedPatient);
 
       await logAction(
         profile,
@@ -185,23 +162,16 @@ export default function Patients() {
       toast.success('تم تحديث بيانات المريض');
       setIsEditDialogOpen(false);
     } catch (error) {
-      console.error('Error updating patient:', error);
       toast.error('فشل تحديث البيانات');
     }
   };
 
   const handleDeletePatient = async (id: string) => {
     try {
-      // 1. Delete locally
-      await localDB.patients.delete(id);
-
-      // 2. Add to outbox
-      await addToOutbox('delete', 'patients', id, null);
-
+      await DataService.delete('patients', id);
       await logAction(profile, 'حذف مريض', 'patient', id, `تم حذف سجل المريض`);
       toast.success('تم حذف المريض بنجاح');
     } catch (error) {
-      console.error('Error deleting patient:', error);
       toast.error('فشل حذف المريض');
     }
   };

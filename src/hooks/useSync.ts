@@ -1,46 +1,52 @@
-import { useEffect } from 'react';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { db } from '@/src/lib/firebase';
-import { localDB } from '@/src/lib/db';
-import { Patient, InventoryItem, LabRequest } from '@/src/types';
-import { processSyncOutbox } from '@/src/lib/syncService';
+import { useEffect, useState } from 'react';
+import { SyncService } from '@/src/lib/syncService';
+import { useAuth } from '../context/AuthContext';
+import { toast } from 'sonner';
 
 export function useSync() {
+  const { user } = useAuth();
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [lastSync, setLastSync] = useState<Date | null>(null);
+
   useEffect(() => {
-    // Process outbox on mount and when coming online
-    processSyncOutbox();
-    
     const handleOnline = () => {
-      console.log('App is online, processing outbox...');
-      processSyncOutbox();
+      setIsOnline(true);
+      toast.success('تم استعادة الاتصال بالإنترنت - يتم المزامنة الآن', {
+        position: 'bottom-right',
+        duration: 3000
+      });
+      SyncService.syncAll();
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      toast.error('تم فقدان الاتصال بالإنترنت - أنت تعمل في الوضع المحلي', {
+        position: 'bottom-right',
+        duration: 5000
+      });
     };
 
     window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
 
-    // 1. Sync Patients
-    // 1. Sync Patients
-    const unsubPatients = onSnapshot(query(collection(db, 'patients'), orderBy('createdAt', 'desc')), (snap) => {
-      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Patient[];
-      localDB.patients.bulkPut(data);
-    });
+    // Initial sync if online
+    if (user && isOnline) {
+      SyncService.syncAll().then(() => setLastSync(new Date()));
+    }
 
-    // 2. Sync Inventory
-    const unsubInventory = onSnapshot(collection(db, 'inventory'), (snap) => {
-      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as InventoryItem[];
-      localDB.inventory.bulkPut(data);
-    });
-
-    // 3. Sync Lab Requests
-    const unsubLab = onSnapshot(collection(db, 'lab_requests'), (snap) => {
-      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LabRequest[];
-      localDB.labRequests.bulkPut(data);
-    });
+    // Periodic sync every 2 minutes
+    const interval = setInterval(() => {
+      if (user && isOnline) {
+        SyncService.syncAll().then(() => setLastSync(new Date()));
+      }
+    }, 120000);
 
     return () => {
       window.removeEventListener('online', handleOnline);
-      unsubPatients();
-      unsubInventory();
-      unsubLab();
+      window.removeEventListener('offline', handleOffline);
+      clearInterval(interval);
     };
-  }, []);
+  }, [user, isOnline]);
+
+  return { isOnline, lastSync };
 }

@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { collection, query, onSnapshot, orderBy, updateDoc, deleteDoc, doc, serverTimestamp, addDoc, getDocs, getDoc, setDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
+import { DataService } from '@/src/lib/dataService';
 import { formatArabicDate, toDate } from '@/src/lib/dateUtils';
 import { logAction } from '@/src/lib/audit';
 import { LabRequest, LabTest, Patient, LabCatalogItem } from '@/src/types';
@@ -143,7 +144,7 @@ export default function Lab() {
     const totalPrice = selectedTests.reduce((acc, t) => acc + (t.price || 0), 0);
 
     try {
-      const docRef = await addDoc(collection(db, 'lab_requests'), {
+      const requestId = await DataService.create('labRequests', {
         patientId: patient.id,
         patientName: patient.name,
         doctorId: profile?.uid || '',
@@ -153,28 +154,33 @@ export default function Lab() {
           status: 'pending',
           items: t.items || [] 
         })),
-        status: 'pending',
-        createdAt: serverTimestamp()
+        status: 'pending'
       });
 
       await logAction(
         profile,
         'إنشاء طلب مختبر',
         'lab',
-        docRef.id,
+        requestId,
         `طلب فحوصات للمريض: ${patient.name}`
       );
 
       // Create a bill for the lab tests
       if (totalPrice > 0) {
-        await addDoc(collection(db, 'bills'), {
+        await DataService.create('bills', {
           patientId: patient.id,
           patientName: patient.name,
-          amount: totalPrice,
+          totalAmount: totalPrice,
+          finalAmount: totalPrice,
+          paidAmount: 0,
           description: `فحوصات مخبرية: ${selectedTests.map(t => t.name).join(', ')}`,
           status: 'pending',
           type: 'lab',
-          createdAt: serverTimestamp()
+          items: selectedTests.map(t => ({
+            description: t.name,
+            amount: t.price || 0,
+            quantity: 1
+          }))
         });
       }
 
@@ -221,9 +227,8 @@ export default function Lab() {
 
   const handleUpdateStatus = async (requestId: string, newStatus: string) => {
     try {
-      await updateDoc(doc(db, 'lab_requests', requestId), {
-        status: newStatus,
-        updatedAt: serverTimestamp()
+      await DataService.update('labRequests', requestId, {
+        status: newStatus
       });
       toast.success('تم تحديث حالة الطلب');
     } catch (error) {
@@ -268,12 +273,11 @@ export default function Lab() {
 
       const allCompleted = processedResults.every(t => t.status === 'completed');
       
-      await updateDoc(doc(db, 'lab_requests', selectedRequest.id), {
+      await DataService.update('labRequests', selectedRequest.id, {
         tests: processedResults,
         status: allCompleted ? 'completed' : 'in-progress',
         technicianId: profile?.uid,
-        completedAt: allCompleted ? serverTimestamp() : null,
-        updatedAt: serverTimestamp()
+        completedAt: allCompleted ? new Date() : null
       });
 
       await logAction(
@@ -294,7 +298,7 @@ export default function Lab() {
   const handleDeleteRequest = async (id: string) => {
     if (!window.confirm('هل أنت متأكد من حذف هذا الطلب؟')) return;
     try {
-      await deleteDoc(doc(db, 'lab_requests', id));
+      await DataService.delete('labRequests', id);
       toast.success('تم حذف الطلب');
     } catch (error) {
       toast.error('فشل حذف الطلب');
