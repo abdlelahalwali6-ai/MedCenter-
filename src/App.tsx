@@ -34,6 +34,7 @@ const PatientProfile = lazy(() => import('./pages/PatientPortal/Profile'));
 
 import PWAManager from './components/PWAManager';
 import InstallPrompt from './components/InstallPrompt';
+import AppInitializer from './components/AppInitializer';
 import { useSync } from './hooks/useSync';
 
 import { seedLabCatalog } from './lib/seedLab';
@@ -78,6 +79,7 @@ function AppContent() {
     <SidebarProvider>
       <PWAManager />
       <InstallPrompt />
+      <AppInitializer />
       <div className="flex min-h-screen w-full bg-background" dir="rtl">
         <AppSidebar />
         <main className="flex-1 flex flex-col min-h-screen overflow-hidden relative">
