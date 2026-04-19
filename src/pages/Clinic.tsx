@@ -275,11 +275,16 @@ export default function Clinic() {
     setPrescription([...prescription, { name: '', dosage: '', frequency: '', duration: '' }]);
   };
 
-  const filteredPatients = patients.filter(p => 
-    p.name.includes(searchTerm) || 
-    (p.mrn && p.mrn.includes(searchTerm)) ||
-    (p.phone && p.phone.includes(searchTerm))
-  );
+  const filteredPatients = patients.filter(p => {
+    const nameStr = (p.name || '').toLowerCase();
+    const mrnStr = (p.mrn || '').toLowerCase();
+    const phoneStr = (p.phone || '');
+    const termLower = searchTerm.toLowerCase();
+
+    return nameStr.includes(termLower) || 
+      mrnStr.includes(termLower) ||
+      phoneStr.includes(searchTerm);
+  });
 
   return (
     <div className="p-6 grid grid-cols-1 lg:grid-cols-4 gap-6" dir="rtl">

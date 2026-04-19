@@ -209,8 +209,12 @@ export default function Appointments() {
   const stats = getStats();
 
   const filteredAppointments = appointments.filter(app => {
-    const matchesSearch = app.patientName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          app.doctorName.toLowerCase().includes(searchQuery.toLowerCase());
+    const patientNameStr = (app.patientName || '').toLowerCase();
+    const doctorNameStr = (app.doctorName || '').toLowerCase();
+    const queryStr = searchQuery.toLowerCase();
+
+    const matchesSearch = patientNameStr.includes(queryStr) || 
+                          doctorNameStr.includes(queryStr);
     const matchesStatus = activeStatusTab === 'all' || app.status === activeStatusTab;
     
     // Date filter

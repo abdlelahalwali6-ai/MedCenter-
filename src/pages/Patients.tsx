@@ -178,9 +178,13 @@ export default function Patients() {
 
   const filteredPatients = patients.filter(p => {
     const searchLower = searchTerm.toLowerCase();
-    const matchesSearch = p.name.toLowerCase().includes(searchLower) || 
-                          p.phone.includes(searchTerm) ||
-                          (p.mrn && p.mrn.toLowerCase().includes(searchLower));
+    const nameStr = (p.name || '').toLowerCase();
+    const phoneStr = (p.phone || '');
+    const mrnStr = (p.mrn || '').toLowerCase();
+
+    const matchesSearch = nameStr.includes(searchLower) || 
+                          phoneStr.includes(searchTerm) ||
+                          mrnStr.includes(searchLower);
     
     const matchesGender = filterGender === 'all' || p.gender === filterGender;
     const matchesBloodType = filterBloodType === 'all' || p.bloodType === filterBloodType;

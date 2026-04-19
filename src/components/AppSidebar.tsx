@@ -28,7 +28,8 @@ import {
   ShieldCheck,
   History,
   TrendingUp,
-  Star
+  Star,
+  Bed
 } from 'lucide-react';
 import { useAuth } from '@/src/context/AuthContext';
 import {
@@ -61,6 +62,7 @@ export function AppSidebar() {
 
   // Helper to determine if a user has one of the required roles
   const hasRole = (roles: string[]) => {
+    if (!roles || !Array.isArray(roles)) return false;
     if (isAdmin && roles.includes('admin')) return true;
     if (isDoctor && roles.includes('doctor')) return true;
     if (isNurse && roles.includes('nurse')) return true;
@@ -92,6 +94,7 @@ export function AppSidebar() {
     { title: 'المختبر', icon: FlaskConical, url: '/lab', roles: ['admin', 'lab_tech', 'doctor'] },
     { title: 'الأشعة', icon: ImageIcon, url: '/radiology', roles: ['admin', 'lab_tech', 'doctor'] },
     { title: 'الصيدلية', icon: Pill, url: '/pharmacy', roles: ['admin', 'pharmacist', 'doctor'] },
+    { title: 'التنويم', icon: Bed, url: '/wards', roles: ['admin', 'doctor', 'nurse'] },
     { title: 'الطوارئ', icon: Activity, url: '/emergency', roles: ['admin', 'doctor', 'nurse'] },
   ];
 
@@ -117,8 +120,11 @@ export function AppSidebar() {
   ];
 
   const filterItems = (items: any[]) => items.filter(item => {
-    const roleMatch = hasRole(item.roles);
-    const searchMatch = !sidebarSearch || item.title.includes(sidebarSearch);
+    const roles = item.roles || [];
+    const roleMatch = hasRole(roles);
+    const itemTitle = (item.title || '').toLowerCase();
+    const searchLower = sidebarSearch.toLowerCase();
+    const searchMatch = !sidebarSearch || itemTitle.includes(searchLower);
     return roleMatch && searchMatch;
   });
 

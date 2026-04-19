@@ -145,9 +145,9 @@ export default function HR() {
   };
 
   const filteredUsers = users.filter(u => 
-    u.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.phoneNumber?.includes(searchTerm)
+    (u.displayName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (u.phoneNumber || '').includes(searchTerm)
   );
 
   const getRoleLabel = (roleValue: string) => {
@@ -163,11 +163,11 @@ export default function HR() {
         </h1>
         
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
+          <DialogTrigger render={
             <Button className="gap-2 shadow-md">
               <UserPlus size={18} /> إضافة مستخدم جديد
             </Button>
-          </DialogTrigger>
+          } />
           <DialogContent className="sm:max-w-[450px]" dir="rtl">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold">إضافة حساب موظف جديد</DialogTitle>

@@ -238,7 +238,7 @@ export default function MedicalRecordView({ patient, onClose }: MedicalRecordVie
                             <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded uppercase flex items-center gap-1">
                                 <Clock size={12} /> {formatArabicDate(record.createdAt)}
                             </span>
-                            <span className="text-primary font-bold text-sm">د. {record.doctorId.substring(0, 8)}</span>
+                            <span className="text-primary font-bold text-sm">د. {record.doctorId?.substring(0, 8) || '---'}</span>
                         </div>
                         <div className="grid grid-cols-2 gap-10">
                             <div>

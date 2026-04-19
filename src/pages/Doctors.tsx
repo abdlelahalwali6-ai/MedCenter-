@@ -93,10 +93,13 @@ export default function Doctors() {
     }));
   };
 
-  const filteredDoctors = doctors.filter(d => 
-    d.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    d.specialization?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredDoctors = doctors.filter(d => {
+    const displayNameStr = (d.displayName || '').toLowerCase();
+    const specializationStr = (d.specialization || '').toLowerCase();
+    const searchLower = searchTerm.toLowerCase();
+
+    return displayNameStr.includes(searchLower) || specializationStr.includes(searchLower);
+  });
 
   return (
     <div className="p-6 space-y-6" dir="rtl">

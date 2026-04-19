@@ -42,7 +42,7 @@ export function SyncStatus() {
       <div className="flex items-center gap-4 px-6 py-3 bg-white border-t border-slate-100 mt-auto shadow-[0_-4px_12px_-8px_rgba(0,0,0,0.05)]">
         <div className="flex items-center gap-4">
           <Tooltip>
-            <TooltipTrigger asChild>
+            <TooltipTrigger render={
               <div className={cn(
                 "flex items-center gap-2 px-3 py-1.5 rounded-full transition-all duration-300",
                 isOnline ? "bg-emerald-50 text-emerald-600 shadow-sm shadow-emerald-100/50" : "bg-rose-50 text-rose-600"
@@ -50,7 +50,7 @@ export function SyncStatus() {
                 {isOnline ? <Wifi size={14} className="animate-pulse" /> : <WifiOff size={14} />}
                 <span className="text-[0.7rem] font-black uppercase tracking-wider">{isOnline ? 'متصل سحابياً' : 'وضع الأوفلاين'}</span>
               </div>
-            </TooltipTrigger>
+            } />
             <TooltipContent>
               <p className="text-xs">{isOnline ? 'النظام متصل بالسحابة وتعمل المزامنة الفورية' : 'أنت تعمل على النسخة المحلية، سيتم المزامنة عند توفر الاتصال'}</p>
             </TooltipContent>

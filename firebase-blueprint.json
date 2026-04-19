@@ -120,6 +120,8 @@
     "/prescriptions/{id}": { "schema": "Prescription", "description": "Medical prescriptions" },
     "/bills/{id}": { "schema": "Bill", "description": "Medical invoices" },
     "/inventory/{id}": { "schema": "InventoryItem", "description": "Medical and pharmacy inventory" },
+    "/emergency_cases/{id}": { "schema": "object", "description": "Emergency department cases" },
+    "/wards/{id}": { "schema": "object", "description": "Ward and bed management" },
     "/messages/{id}": { "schema": "object", "description": "Secure messages" },
     "/services_catalog/{id}": { "schema": "object", "description": "General service catalog" },
     "/service_requests/{id}": { "schema": "object", "description": "General service requests" },

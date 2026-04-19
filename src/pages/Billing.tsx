@@ -275,7 +275,7 @@ export default function Billing() {
         
         <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
           <div>
-            <p><strong>رقم الفاتورة:</strong> ${bill.id.substring(0, 8)}</p>
+            <p><strong>رقم الفاتورة:</strong> {bill.id?.substring(0, 8) || '---'}</p>
             <p><strong>التاريخ:</strong> ${new Date().toLocaleDateString('ar-SA')}</p>
           </div>
           <div style="text-align: left;">
@@ -355,10 +355,13 @@ export default function Billing() {
     printWindow.document.close();
   };
 
-  const filteredBills = bills.filter(bill => 
-    bill.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    bill.id.includes(searchTerm)
-  );
+  const filteredBills = bills.filter(bill => {
+    const patientNameStr = (bill.patientName || '').toLowerCase();
+    const idStr = (bill.id || '');
+    const termStr = searchTerm.toLowerCase();
+
+    return patientNameStr.includes(termStr) || idStr.includes(searchTerm);
+  });
 
   const totalRevenue = bills.filter(b => b.status === 'paid').reduce((acc, b) => acc + (b.finalAmount || b.totalAmount), 0);
   const pendingRevenue = bills.filter(b => b.status !== 'paid').reduce((acc, b) => acc + ((b.finalAmount || b.totalAmount) - (b.paidAmount || 0)), 0);
