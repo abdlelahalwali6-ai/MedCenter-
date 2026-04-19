@@ -186,6 +186,7 @@ export default function Patients() {
                           phoneStr.includes(searchTerm) ||
                           mrnStr.includes(searchLower);
     
+    // Safety check for gender and bloodType
     const matchesGender = filterGender === 'all' || p.gender === filterGender;
     const matchesBloodType = filterBloodType === 'all' || p.bloodType === filterBloodType;
 
@@ -399,7 +400,7 @@ export default function Patients() {
                     <TableCell className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-lg ${p.gender === 'male' ? 'bg-blue-50 text-blue-600' : 'bg-rose-50 text-rose-600'}`}>
-                          {p.name.charAt(0)}
+                          {(p.name || '').charAt(0)}
                         </div>
                         <div className="flex flex-col">
                           <span className="font-bold text-slate-900 leading-tight">{p.name}</span>
@@ -567,7 +568,7 @@ export default function Patients() {
             <div className="space-y-6 py-4">
                <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
                   <div className={`w-16 h-16 rounded-2xl flex items-center justify-center font-bold text-2xl ${selectedPatient.gender === 'male' ? 'bg-blue-100 text-blue-600' : 'bg-rose-100 text-rose-600'}`}>
-                    {selectedPatient.name.charAt(0)}
+                    {(selectedPatient?.name || '').charAt(0)}
                   </div>
                   <div>
                     <h3 className="text-xl font-bold">{selectedPatient.name}</h3>

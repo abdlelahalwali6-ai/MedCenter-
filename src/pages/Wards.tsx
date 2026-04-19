@@ -83,6 +83,9 @@ export default function Wards() {
     const q = query(collection(db, 'wards'), orderBy('floor'), orderBy('roomNumber'), orderBy('bedNumber'));
     const unsub = onSnapshot(q, (snap) => {
       setBeds(snap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as WardBed));
+    }, (error) => {
+      console.error("Wards fetch error:", error);
+      toast.error('فشل في مزامنة بيانات الأسرة');
     });
     return () => unsub();
   }, []);

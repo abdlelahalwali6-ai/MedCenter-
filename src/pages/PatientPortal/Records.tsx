@@ -98,7 +98,7 @@ export default function PatientRecords() {
               <CardHeader className="pb-2">
                 <div className="flex justify-between items-start">
                   <div>
-                    <CardTitle className="text-lg">طلب مختبر #{lab.id.substring(0, 6)}</CardTitle>
+                    <CardTitle className="text-lg">طلب مختبر #{(lab.id || '').substring(0, 6)}</CardTitle>
                     <CardDescription>{formatArabicDate(lab.createdAt)}</CardDescription>
                   </div>
                   <Badge variant={lab.status === 'completed' ? 'success' : 'outline'}>

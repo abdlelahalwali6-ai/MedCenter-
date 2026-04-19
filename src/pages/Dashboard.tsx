@@ -156,11 +156,16 @@ export default function Dashboard() {
       try {
         // 1. Search Local DB First (Fast)
         const localResults = await localDB.patients
-          .filter(p => 
-            p.name.toLowerCase().includes(quickSearch.toLowerCase()) || 
-            p.phone.includes(quickSearch) ||
-            (p.mrn || '').includes(quickSearch)
-          )
+          .filter(p => {
+            const name = (p.name || '').toLowerCase();
+            const phone = (p.phone || '');
+            const mrn = (p.mrn || '').toLowerCase();
+            const search = quickSearch.toLowerCase();
+            
+            return name.includes(search) || 
+                   phone.includes(quickSearch) ||
+                   mrn.includes(search);
+          })
           .limit(5)
           .toArray();
 
@@ -229,9 +234,14 @@ export default function Dashboard() {
         const hourlyPatients: { [key: number]: number } = {};
         snap.docs.forEach(doc => {
           const data = doc.data();
-          if (data.startTime) {
-            const hour = parseInt(data.startTime.split(':')[0]);
-            hourlyPatients[hour] = (hourlyPatients[hour] || 0) + 1;
+          if (data.startTime && typeof data.startTime === 'string') {
+            const parts = data.startTime.split(':');
+            if (parts.length > 0) {
+              const hour = parseInt(parts[0]);
+              if (!isNaN(hour)) {
+                hourlyPatients[hour] = (hourlyPatients[hour] || 0) + 1;
+              }
+            }
           }
         });
         
@@ -243,14 +253,15 @@ export default function Dashboard() {
         
         setChartData(prevTrend => {
           const newTrend = [...trend];
-          if (prevTrend.length === newTrend.length) {
+          if (prevTrend && prevTrend.length === newTrend.length) {
             newTrend.forEach((item, i) => {
-              item.revenue = prevTrend[i].revenue || 0;
+              item.revenue = prevTrend[i]?.revenue || 0;
             });
           }
           return newTrend;
         });
-      }
+      },
+      (error) => console.error("Appointments chart sync error:", error)
     );
 
     // Revenue tracking (Bills)
@@ -265,7 +276,7 @@ export default function Dashboard() {
           const amount = data.finalAmount || data.totalAmount || data.amount || data.total || 0;
           totalRev += amount;
           
-          if (data.createdAt) {
+          if (data.createdAt && typeof data.createdAt.toDate === 'function') {
             const date = data.createdAt.toDate();
             const hour = date.getHours();
             hourlyRev[hour] = (hourlyRev[hour] || 0) + amount;
@@ -277,7 +288,7 @@ export default function Dashboard() {
         setChartData(prevTrend => {
           const baseline = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
           return baseline.map(h => {
-            const existing = prevTrend.find(p => {
+            const existing = prevTrend && prevTrend.find(p => {
               const hourTitle = `${h > 12 ? h - 12 : h} ${h >= 12 ? 'PM' : 'AM'}`;
               return p.name === hourTitle;
             });
@@ -288,7 +299,8 @@ export default function Dashboard() {
             };
           });
         });
-      }
+      },
+      (error) => console.error("Billing chart sync error:", error)
     );
 
     const unsubPres = onSnapshot(

@@ -76,6 +76,9 @@ export default function Clinic() {
         const patient = patientsData.find(p => p.id === patientIdFromUrl);
         if (patient) setSelectedPatient(patient);
       }
+    }, (error) => {
+      console.error("Patients sync error:", error);
+      toast.error('فشل في مزامنة بيانات المرضى');
     });
 
     // Fetch today's appointments for "checked-in" status
@@ -91,6 +94,8 @@ export default function Clinic() {
     );
     const unsubApp = onSnapshot(qApp, (snap) => {
       setAppointments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Appointment[]);
+    }, (error) => {
+      console.error("Appointments today sync error:", error);
     });
 
     return () => { unsub(); unsubApp(); };
@@ -349,7 +354,7 @@ export default function Clinic() {
             <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between bg-white p-6 rounded-2xl border shadow-sm">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-sky-600 flex items-center justify-center text-white text-2xl font-black shadow-lg shadow-primary/20">
-                  {selectedPatient.name.substring(0, 2)}
+                  {(selectedPatient?.name || '').substring(0, 2)}
                 </div>
                 <div>
                   <h2 className="text-2xl font-black text-slate-800">{selectedPatient.name}</h2>

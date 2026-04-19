@@ -285,7 +285,7 @@ export default function HR() {
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center font-bold text-primary">
-                      {user.displayName?.substring(0, 1)}
+                      {(user.displayName || '').substring(0, 1)}
                     </div>
                     <div>
                       <div className="font-bold text-slate-800">{user.displayName}</div>

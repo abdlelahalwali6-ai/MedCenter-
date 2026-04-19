@@ -100,6 +100,9 @@ export default function Emergency() {
 
     const unsub = onSnapshot(q, (snap) => {
       setCases(snap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as TriageCase));
+    }, (error) => {
+      console.error("Emergency cases fetch error:", error);
+      toast.error('فشل في مزامنة بيانات الطوارئ');
     });
 
     return () => unsub();
@@ -161,10 +164,14 @@ export default function Emergency() {
     }
   };
 
-  const filteredCases = cases.filter(c => 
-    c.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.phone.includes(searchTerm)
-  );
+  const filteredCases = cases.filter(c => {
+    const name = c.patientName || '';
+    const phone = c.phone || '';
+    const search = searchTerm.toLowerCase();
+    
+    return name.toLowerCase().includes(search) ||
+           phone.includes(searchTerm);
+  });
 
   const getPriorityColor = (priority: TriageCase['priority']) => {
     switch (priority) {

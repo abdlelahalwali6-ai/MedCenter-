@@ -313,7 +313,7 @@ export default function Pharmacy() {
     const scientificNameStr = (item.scientificName || '').toLowerCase();
     const commercialNameStr = (item.commercialName || '').toLowerCase();
     const barcodeStr = (item.barcode || '');
-    const termLower = searchTerm.toLowerCase();
+    const termLower = (searchTerm || '').toLowerCase();
 
     return nameStr.includes(termLower) ||
       scientificNameStr.includes(termLower) ||
