@@ -36,8 +36,7 @@ export default function PatientMessages() {
 
     const q = query(
       collection(db, 'messages'),
-      where('senderId', 'in', [user.uid, selectedStaff.id]),
-      where('receiverId', 'in', [user.uid, selectedStaff.id]),
+      where('participants', 'array-contains', user.uid),
       orderBy('createdAt', 'asc'),
       limit(50)
     );
@@ -74,9 +73,11 @@ export default function PatientMessages() {
         senderName: profile?.displayName || 'مريض',
         receiverId: selectedStaff.id,
         receiverName: selectedStaff.name,
+        participants: [user.uid, selectedStaff.id],
         content: newMessage,
         read: false,
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       });
       setNewMessage('');
     } catch (error) {

@@ -26,8 +26,8 @@ const SYNC_COLLECTIONS = [
   { name: 'prescriptions', firestoreName: 'prescriptions', patientFilter: 'patientId' },
   { name: 'radiologyRequests', firestoreName: 'radiology_requests', patientFilter: 'patientId' },
   { name: 'bills', firestoreName: 'bills', patientFilter: 'patientId' },
-  { name: 'messages', firestoreName: 'messages' },
-  { name: 'auditLogs', firestoreName: 'audit_logs', roles: ['admin', 'doctor', 'receptionist'] },
+  { name: 'messages', firestoreName: 'messages', patientFilter: 'participants', filterType: 'array-contains' },
+  { name: 'auditLogs', firestoreName: 'audit_logs', roles: ['admin'] },
   { name: 'serviceRequests', firestoreName: 'service_requests', patientFilter: 'patientId' },
   { name: 'serviceCatalog', firestoreName: 'services_catalog' },
   { name: 'labCatalog', firestoreName: 'lab_catalog' },
@@ -48,6 +48,8 @@ export class SyncService {
     if (now - this.lastSyncAttempt < 5000) return;
     this.lastSyncAttempt = now;
 
+    // Use passed role/id or fall back to profile/auth
+    // Note: In a production app, we might want to fetch the profile from localDB if not passed
     const effectiveRole = userRole || 'patient';
     const effectiveUserId = userId || auth.currentUser.uid;
 
@@ -61,9 +63,18 @@ export class SyncService {
       // 2. Iterate through collections
       for (const col of SYNC_COLLECTIONS as any[]) {
         try {
-          if (col.roles) {
-            if (!effectiveRole || !col.roles.includes(effectiveRole)) continue;
+          // If the collection defines target roles and the current role isn't among them, skip.
+          // Fallback: If no roles defined, everyone tries to sync (respecting patientFilter later)
+          if (col.roles && !col.roles.includes(effectiveRole)) {
+            continue;
           }
+
+          // Security Guard: Prevent patients from syncing collections they definitely shouldn't touch
+          // if they don't have a patientFilter.
+          if (effectiveRole === 'patient' && !col.patientFilter && col.roles && !col.roles.includes('patient')) {
+            continue;
+          }
+
           await this.syncCollection(col.name, col.firestoreName, effectiveRole, effectiveUserId, col.patientFilter);
         } catch (error) {
           console.error(`[Sync] Failed to sync ${col.name}:`, error);
@@ -82,22 +93,31 @@ export class SyncService {
     if (this.listeners.length > 0) return; // Already listening
 
     const effectiveRole = userRole || 'patient';
-    const effectiveUserId = userId || auth.currentUser.uid;
+    const effectiveUserId = userId || auth.currentUser?.uid;
+
+    if (!effectiveUserId) return;
 
     console.log(`[Sync] Initializing realtime listeners for ${effectiveRole}`);
 
     SYNC_COLLECTIONS.forEach(col => {
       // 1. Check authorization for this user role
       if (col.roles && !col.roles.includes(effectiveRole)) return;
+      
+      // Additional check for patients
+      if (effectiveRole === 'patient' && !col.patientFilter && col.roles && !col.roles.includes('patient')) return;
 
       // 2. Set up query
-      let constraints = [orderBy('updatedAt', 'desc'), limit(50)];
+      let constraints: any[] = [orderBy('updatedAt', 'desc'), limit(100)];
       
       if (effectiveRole === 'patient' && col.patientFilter && effectiveUserId) {
-        constraints.unshift(where(col.patientFilter, '==', effectiveUserId) as any);
+        const filterType = (col as any).filterType || '==';
+        constraints.unshift(where(col.patientFilter, filterType, effectiveUserId));
+        
+        // Use a simpler query for messages to avoid composite index requirements if possible
+        // Actually, we still need updatedAt for realtime ordering, but we could reduce the complexity.
       }
 
-      const q = query(collection(db, col.firestoreName), ...constraints as any[]);
+      const q = query(collection(db, col.firestoreName), ...constraints);
 
       // 3. Subscribe to snapshots
       const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -241,10 +261,12 @@ export class SyncService {
     ];
 
     if (userRole === 'patient' && patientFilter && userId) {
-      constraints.unshift(where(patientFilter, '==', userId) as any);
+      const filterItem = SYNC_COLLECTIONS.find(c => c.name === localName);
+      const filterType = (filterItem as any)?.filterType || '==';
+      constraints.unshift(where(patientFilter, filterType, userId));
     }
 
-    const q = query(collection(db, firestoreName), ...constraints as any[]);
+    const q = query(collection(db, firestoreName), ...constraints);
     const snapshot = await getDocs(q);
     if (snapshot.empty) return;
 

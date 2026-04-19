@@ -233,7 +233,7 @@ export default function Appointments() {
     const dateA = toDate(a.date).getTime();
     const dateB = toDate(b.date).getTime();
     if (dateA !== dateB) return dateA - dateB;
-    return a.startTime.localeCompare(b.startTime);
+    return (a.startTime || '').localeCompare(b.startTime || '');
   });
 
   return (

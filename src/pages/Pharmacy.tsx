@@ -318,7 +318,7 @@ export default function Pharmacy() {
     return nameStr.includes(termLower) ||
       scientificNameStr.includes(termLower) ||
       commercialNameStr.includes(termLower) ||
-      barcodeStr === searchTerm;
+      barcodeStr === (searchTerm || '');
   });
 
   return (

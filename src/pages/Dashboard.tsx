@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, where, Timestamp, getDocs, limit, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, getNextMRN } from '@/src/lib/firebase';
+import { DataService } from '@/src/lib/dataService';
 import { localDB } from '@/src/lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useAuth } from '@/src/context/AuthContext';
@@ -375,7 +376,7 @@ export default function Dashboard() {
 
     setIsSubmitting(true);
     try {
-      const mrn = await getNextMRN();
+      const mrn = await DataService.getNextSequentialId('patient_mrn', 'MC-');
       const docRef = await addDoc(collection(db, 'patients'), {
         ...newPatientData,
         mrn,

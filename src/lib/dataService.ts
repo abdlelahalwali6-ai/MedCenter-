@@ -71,8 +71,9 @@ export class DataService {
     });
     
     if (navigator.onLine) {
-      // Deletions are still handled by the periodic/manual syncAll or a specific call
-      SyncService.syncAll(); 
+      // Deletions are pushed in the background during the next syncAll call
+      // or we can manually trigger a deletion sync if we had the context here.
+      // We avoid SyncService.syncAll() without args as it defaults to 'patient'.
     }
   }
 

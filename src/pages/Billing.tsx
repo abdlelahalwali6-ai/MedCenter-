@@ -106,10 +106,15 @@ export default function Billing() {
   const handleCreateBill = async (e: React.FormEvent) => {
     e.preventDefault();
     const patient = patients.find(p => p.id === newBill.patientId);
-    if (!patient) return;
+    if (!patient) {
+      toast.error('يرجى اختيار مريض');
+      return;
+    }
 
     const totalAmount = newBill.items.reduce((acc, item) => acc + (item.amount * item.quantity), 0);
-    const insuranceDiscount = (totalAmount * (newBill.insuranceCoverage || 0)) / 100;
+    const insuranceDiscount = newBill.paymentMethod === 'insurance' 
+      ? (totalAmount * (newBill.insuranceCoverage || 0)) / 100 
+      : 0;
     const finalAmount = totalAmount + newBill.taxAmount - newBill.discountAmount - insuranceDiscount;
 
     const doctor = doctors.find(d => d.uid === newBill.doctorId);
@@ -129,9 +134,9 @@ export default function Billing() {
         finalAmount,
         paidAmount: 0,
         paymentMethod: newBill.paymentMethod,
-        insuranceProvider: newBill.insuranceProvider,
-        insuranceCoverage: newBill.insuranceCoverage,
-        status: 'unpaid'
+        insuranceProvider: newBill.paymentMethod === 'insurance' ? newBill.insuranceProvider : '',
+        insuranceCoverage: newBill.paymentMethod === 'insurance' ? newBill.insuranceCoverage : 0,
+        status: 'pending'
       });
 
       await logAction(
@@ -155,8 +160,10 @@ export default function Billing() {
       setIsAddDialogOpen(false);
       setNewBill({ 
         patientId: '', 
+        doctorId: '', 
         requestId: '',
         type: 'clinic',
+        costCenter: 'مركز العيادات',
         items: [{ description: '', amount: 0, quantity: 1 }], 
         discountAmount: 0,
         taxAmount: 0,
@@ -216,7 +223,7 @@ export default function Billing() {
     const payAmount = amount ?? (totalToPay - currentPaid);
     const newPaidAmount = currentPaid + payAmount;
     
-    let status: Bill['status'] = 'partially-paid';
+    let status: Bill['status'] = 'partially_paid';
     if (newPaidAmount >= totalToPay) {
       status = 'paid';
     }
@@ -275,7 +282,7 @@ export default function Billing() {
         
         <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
           <div>
-            <p><strong>رقم الفاتورة:</strong> {bill.id?.substring(0, 8) || '---'}</p>
+            <p><strong>رقم الفاتورة:</strong> ${bill.id?.substring(0, 8) || '---'}</p>
             <p><strong>التاريخ:</strong> ${new Date().toLocaleDateString('ar-SA')}</p>
           </div>
           <div style="text-align: left;">
@@ -314,10 +321,10 @@ export default function Billing() {
               <td colspan="3" style="border: 1px solid #e2e8f0; padding: 12px; text-align: left;">الإجمالي</td>
               <td style="border: 1px solid #e2e8f0; padding: 12px; text-align: center;">${bill.totalAmount.toLocaleString()} ر.ي</td>
             </tr>
-            ${bill.discountAmount > 0 ? `
+            ${(bill.discountAmount || 0) > 0 ? `
             <tr style="background-color: #fff5f5;">
               <td colspan="3" style="border: 1px solid #e2e8f0; padding: 12px; text-align: left; color: #e53e3e;">الخصم</td>
-              <td style="border: 1px solid #e2e8f0; padding: 12px; text-align: center; color: #e53e3e;">-${bill.discountAmount.toLocaleString()} ر.ي</td>
+              <td style="border: 1px solid #e2e8f0; padding: 12px; text-align: center; color: #e53e3e;">-${bill.discountAmount?.toLocaleString()} ر.ي</td>
             </tr>
             ` : ''}
             <tr style="background-color: #f0f9ff; font-weight: bold;">
@@ -340,7 +347,7 @@ export default function Billing() {
           </div>
         </div>
         
-        <div style="text-align: center; margin-top: 50px; font-size: 12px; color: #999; border-top: 1px solid #eee; pt: 20px;">
+        <div style="text-align: center; margin-top: 50px; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 20px;">
           شكراً لثقتكم بنا - مركز مد كير الطبي
         </div>
       </div>
@@ -358,9 +365,9 @@ export default function Billing() {
   const filteredBills = bills.filter(bill => {
     const patientNameStr = (bill.patientName || '').toLowerCase();
     const idStr = (bill.id || '');
-    const termStr = searchTerm.toLowerCase();
+    const termStr = (searchTerm || '').toLowerCase();
 
-    return patientNameStr.includes(termStr) || idStr.includes(searchTerm);
+    return patientNameStr.includes(termStr) || idStr.includes(searchTerm || '');
   });
 
   const totalRevenue = bills.filter(b => b.status === 'paid').reduce((acc, b) => acc + (b.finalAmount || b.totalAmount), 0);
@@ -682,7 +689,7 @@ export default function Billing() {
                         <Button variant="ghost" size="sm" onClick={() => setSelectedBill(inv)}>
                           <FileText size={16} />
                         </Button>
-                        {inv.status === 'unpaid' && (
+                        {inv.status !== 'paid' && (
                           <Button variant="outline" size="sm" onClick={() => handlePayBill(inv.id)}>تسجيل الدفع</Button>
                         )}
                         <Button variant="ghost" size="sm" onClick={() => handlePrint(inv)}>
