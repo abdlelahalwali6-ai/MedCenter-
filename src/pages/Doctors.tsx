@@ -93,13 +93,10 @@ export default function Doctors() {
     }));
   };
 
-  const filteredDoctors = doctors.filter(d => {
-    const displayNameStr = (d.displayName || '').toLowerCase();
-    const specializationStr = (d.specialization || '').toLowerCase();
-    const searchLower = searchTerm.toLowerCase();
-
-    return displayNameStr.includes(searchLower) || specializationStr.includes(searchLower);
-  });
+  const filteredDoctors = doctors.filter(d => 
+    d.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    d.specialization?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="p-6 space-y-6" dir="rtl">
@@ -154,7 +151,7 @@ export default function Doctors() {
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-primary">
-                      {(doc.displayName || '').substring(0, 2)}
+                      {doc.displayName?.substring(0, 2)}
                     </div>
                     <div>
                       <p className="font-bold">{doc.displayName}</p>

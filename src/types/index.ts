@@ -190,7 +190,7 @@ export interface Bill {
   discountAmount: number;
   finalAmount: number;
   paidAmount: number;
-  status: 'unpaid' | 'pending' | 'partially_paid' | 'partially-paid' | 'paid' | 'void';
+  status: 'unpaid' | 'partially-paid' | 'paid' | 'void';
   paymentMethod?: 'cash' | 'card' | 'insurance' | 'bank-transfer';
   type: 'pharmacy' | 'lab' | 'radiology' | 'clinic' | 'other';
   insuranceProvider?: string;

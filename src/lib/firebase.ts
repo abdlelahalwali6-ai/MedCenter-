@@ -143,8 +143,6 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   }
-  console.error('Firestore Error Detailed: ', JSON.stringify(errInfo, null, 2));
-  const humanFriendlyMessage = (error instanceof Error ? error.message : String(error)) 
-    || 'حدث خطأ في الوصول لقاعدة البيانات. يرجى مراجعة الصلاحيات.';
-  throw new Error(humanFriendlyMessage);
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
 }

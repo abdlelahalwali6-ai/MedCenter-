@@ -308,18 +308,12 @@ export default function Pharmacy() {
     }
   };
 
-  const filteredInventory = inventory.filter(item => {
-    const nameStr = (item.name || '').toLowerCase();
-    const scientificNameStr = (item.scientificName || '').toLowerCase();
-    const commercialNameStr = (item.commercialName || '').toLowerCase();
-    const barcodeStr = (item.barcode || '');
-    const termLower = (searchTerm || '').toLowerCase();
-
-    return nameStr.includes(termLower) ||
-      scientificNameStr.includes(termLower) ||
-      commercialNameStr.includes(termLower) ||
-      barcodeStr === (searchTerm || '');
-  });
+  const filteredInventory = inventory.filter(item => 
+    item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.scientificName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.commercialName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.barcode === searchTerm
+  );
 
   return (
     <div className="p-6 space-y-6" dir="rtl">

@@ -6,11 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, where, Timestamp, getDocs, limit, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, getNextMRN } from '@/src/lib/firebase';
-import { DataService } from '@/src/lib/dataService';
-import { localDB } from '@/src/lib/db';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { useAuth } from '@/src/context/AuthContext';
-import { Patient } from '@/src/types';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { 
@@ -68,29 +64,6 @@ export default function Dashboard() {
 
   if (isPatient) return null;
 
-  // Local Database Real-time Counts
-  const localPatientsCount = useLiveQuery(() => localDB.patients.count()) || 0;
-  const localAppointmentsCount = useLiveQuery(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return localDB.appointments.where('date').aboveOrEqual(today.getTime()).count();
-  }) || 0;
-  
-  const localPendingPrescriptions = useLiveQuery(() => 
-    localDB.prescriptions.where('status').equals('pending').count()
-  ) || 0;
-  
-  const localPendingRadiology = useLiveQuery(() => 
-    localDB.radiologyRequests.where('status').equals('pending').count()
-  ) || 0;
-
-  const localRevenue = useLiveQuery(async () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayBills = await localDB.bills.where('createdAt').aboveOrEqual(today.getTime()).toArray();
-    return todayBills.reduce((acc, bill) => acc + (bill.finalAmount || bill.totalAmount || 0), 0);
-  }) || 0;
-
   const [counts, setCounts] = useState({
     patients: 0,
     appointments: 0,
@@ -98,35 +71,7 @@ export default function Dashboard() {
     radiology: 0,
     revenue: 0
   });
-
-  // Sync state with local counts
-  useEffect(() => {
-    setCounts({
-      patients: localPatientsCount,
-      appointments: localAppointmentsCount,
-      prescriptions: localPendingPrescriptions,
-      radiology: localPendingRadiology,
-      revenue: localRevenue
-    });
-  }, [localPatientsCount, localAppointmentsCount, localPendingPrescriptions, localPendingRadiology, localRevenue]);
-
-  const localRecentAppointments = useLiveQuery(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return localDB.appointments
-      .where('date').aboveOrEqual(today.getTime())
-      .limit(10)
-      .toArray();
-  }, []) || [];
-
   const [recentAppointments, setRecentAppointments] = useState<any[]>([]);
-
-  // Sync recent appointments
-  useEffect(() => {
-    if (localRecentAppointments.length > 0) {
-      setRecentAppointments(localRecentAppointments);
-    }
-  }, [localRecentAppointments]);
   const [chartView, setChartView] = useState<'patients' | 'revenue'>('patients');
   const [chartData, setChartData] = useState<any[]>([]);
 
@@ -155,43 +100,31 @@ export default function Dashboard() {
       }
 
       try {
-        // 1. Search Local DB First (Fast)
-        const localResults = await localDB.patients
-          .filter(p => {
-            const name = (p.name || '').toLowerCase();
-            const phone = (p.phone || '');
-            const mrn = (p.mrn || '').toLowerCase();
-            const search = quickSearch.toLowerCase();
-            
-            return name.includes(search) || 
-                   phone.includes(quickSearch) ||
-                   mrn.includes(search);
-          })
-          .limit(5)
-          .toArray();
-
-        // 2. Fallback to Cloud if local results are few or we want fresh cloud data
-        let results = [...localResults];
+        const q = query(
+          collection(db, 'patients'),
+          where('name', '>=', quickSearch),
+          where('name', '<=', quickSearch + '\uf8ff'),
+          limit(5)
+        );
+        const snap = await getDocs(q);
+        const results = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         
-        if (results.length < 5 && navigator.onLine) {
-          const q = query(
+        if (results.length < 5) {
+          const qPhone = query(
             collection(db, 'patients'),
-            where('name', '>=', quickSearch),
-            where('name', '<=', quickSearch + '\uf8ff'),
-            limit(5)
+            where('phone', '>=', quickSearch),
+            where('phone', '<=', quickSearch + '\uf8ff'),
+            limit(5 - results.length)
           );
-          const snap = await getDocs(q);
-          const cloudResults = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Patient[];
-          
-          // Merge avoiding duplicates
-          cloudResults.forEach(cr => {
-            if (!results.find(r => r.id === cr.id)) {
-              results.push(cr);
+          const snapPhone = await getDocs(qPhone);
+          snapPhone.docs.forEach(doc => {
+            if (!results.find(r => r.id === doc.id)) {
+              results.push({ id: doc.id, ...doc.data() });
             }
           });
         }
 
-        setSuggestions(results.slice(0, 5) as any[]);
+        setSuggestions(results);
         setShowSuggestions(results.length > 0);
       } catch (error) {
         console.error("Search suggestions error:", error);
@@ -223,46 +156,50 @@ export default function Dashboard() {
   useEffect(() => {
     if (!profile || profile.role === 'patient') return;
 
+    // Real-time counts
+    const unsubPatients = onSnapshot(collection(db, 'patients'), (snap) => {
+      setCounts(prev => ({ ...prev, patients: snap.size }));
+    }, (err) => console.error("Patients count error:", err));
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayTS = Timestamp.fromDate(today);
 
-    // Real-time chart data builder
+    // Appointments for today + list
     const unsubApp = onSnapshot(
       query(collection(db, 'appointments'), where('date', '>=', todayTS)),
       (snap) => {
+        setCounts(prev => ({ ...prev, appointments: snap.size }));
+        setRecentAppointments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })).slice(0, 5));
+        
         // Build Patients Chart Data (Hourly)
         const hourlyPatients: { [key: number]: number } = {};
         snap.docs.forEach(doc => {
           const data = doc.data();
-          if (data.startTime && typeof data.startTime === 'string') {
-            const parts = data.startTime.split(':');
-            if (parts.length > 0) {
-              const hour = parseInt(parts[0]);
-              if (!isNaN(hour)) {
-                hourlyPatients[hour] = (hourlyPatients[hour] || 0) + 1;
-              }
-            }
+          if (data.startTime) {
+            const hour = parseInt(data.startTime.split(':')[0]);
+            hourlyPatients[hour] = (hourlyPatients[hour] || 0) + 1;
           }
         });
         
-        const trend = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(h => ({
+        const trend = [8, 10, 12, 14, 16, 18, 20].map(h => ({
           name: `${h > 12 ? h - 12 : h} ${h >= 12 ? 'PM' : 'AM'}`,
           patients: hourlyPatients[h] || 0,
-          revenue: 0 
+          revenue: 0 // Will be merged from invoices
         }));
         
         setChartData(prevTrend => {
           const newTrend = [...trend];
-          if (prevTrend && prevTrend.length === newTrend.length) {
+          // Preserve revenue if it was already fetched
+          if (prevTrend.length === newTrend.length) {
             newTrend.forEach((item, i) => {
-              item.revenue = prevTrend[i]?.revenue || 0;
+              item.revenue = prevTrend[i].revenue || 0;
             });
           }
           return newTrend;
         });
       },
-      (error) => console.error("Appointments chart sync error:", error)
+      (err) => console.error("Appointments count error:", err)
     );
 
     // Revenue tracking (Bills)
@@ -277,7 +214,7 @@ export default function Dashboard() {
           const amount = data.finalAmount || data.totalAmount || data.amount || data.total || 0;
           totalRev += amount;
           
-          if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+          if (data.createdAt) {
             const date = data.createdAt.toDate();
             const hour = date.getHours();
             hourlyRev[hour] = (hourlyRev[hour] || 0) + amount;
@@ -287,21 +224,20 @@ export default function Dashboard() {
         setCounts(prev => ({ ...prev, revenue: totalRev }));
         
         setChartData(prevTrend => {
-          const baseline = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+          const baseline = [8, 10, 12, 14, 16, 18, 20];
           return baseline.map(h => {
-            const existing = prevTrend && prevTrend.find(p => {
+            const existing = prevTrend.find(p => {
               const hourTitle = `${h > 12 ? h - 12 : h} ${h >= 12 ? 'PM' : 'AM'}`;
               return p.name === hourTitle;
             });
             return {
               name: `${h > 12 ? h - 12 : h} ${h >= 12 ? 'PM' : 'AM'}`,
               patients: existing?.patients || 0,
-              revenue: hourlyRev[h] || 0
+              revenue: (hourlyRev[h] || 0) + (hourlyRev[h+1] || 0) // Group by 2-hour window to match labels
             };
           });
         });
-      },
-      (error) => console.error("Billing chart sync error:", error)
+      }
     );
 
     const unsubPres = onSnapshot(
@@ -321,6 +257,7 @@ export default function Dashboard() {
     );
 
     return () => {
+      unsubPatients();
       unsubApp();
       unsubInvoices();
       unsubPres();
@@ -376,7 +313,7 @@ export default function Dashboard() {
 
     setIsSubmitting(true);
     try {
-      const mrn = await DataService.getNextSequentialId('patient_mrn', 'MC-');
+      const mrn = await getNextMRN();
       const docRef = await addDoc(collection(db, 'patients'), {
         ...newPatientData,
         mrn,
@@ -612,8 +549,8 @@ export default function Dashboard() {
                     <tr key={i} className="group/row hover:bg-slate-50/80 transition-all">
                       <td className="px-5 py-5">
                         <div className="flex flex-col">
-                          <span className="text-sm font-bold text-slate-800 group-hover/row:text-primary transition-colors">{(row.patientName || 'مريض غير معروف')}</span>
-                          <span className="text-[0.65rem] text-slate-400 font-medium">{(row.doctorName || 'طبيب غير معروف')}</span>
+                          <span className="text-sm font-bold text-slate-800 group-hover/row:text-primary transition-colors">{row.patientName}</span>
+                          <span className="text-[0.65rem] text-slate-400 font-medium">{row.doctorName}</span>
                         </div>
                       </td>
                       <td className="px-5 py-5 text-left">
@@ -622,7 +559,7 @@ export default function Dashboard() {
                           row.status === 'completed' ? 'bg-emerald-50 text-emerald-600' :
                           'bg-slate-100 text-slate-600'
                         }`}>
-                          {row.status === 'scheduled' ? 'مجدول' : row.status === 'completed' ? 'مكتمل' : (row.status || 'غير محدد')}
+                          {row.status === 'scheduled' ? 'مجدول' : row.status === 'completed' ? 'مكتمل' : row.status}
                         </span>
                       </td>
                     </tr>

@@ -180,13 +180,10 @@ export default function Radiology() {
     }
   };
 
-  const filteredRequests = requests.filter(req => {
-    const patientNameStr = (req.patientName || '').toLowerCase();
-    const idStr = (req.id || '');
-    const termStr = searchTerm.toLowerCase();
-
-    return patientNameStr.includes(termStr) || idStr.includes(searchTerm);
-  });
+  const filteredRequests = requests.filter(req => 
+    req.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    req.id.includes(searchTerm)
+  );
 
   const handleScan = (barcode: string) => {
     if (scannerMode === 'search') {

@@ -45,15 +45,10 @@ export default function AuditLogs() {
   }, []);
 
   const filteredLogs = logs.filter(log => {
-    const userNameStr = (log.userName || '').toLowerCase();
-    const actionStr = (log.action || '').toLowerCase();
-    const detailsStr = (log.details || '').toLowerCase();
-    const termLower = searchTerm.toLowerCase();
-
     const matchesSearch = 
-      userNameStr.includes(termLower) ||
-      actionStr.includes(termLower) ||
-      detailsStr.includes(termLower);
+      log.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      log.details.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesType = filterType === 'all' || log.entityType === filterType;
 

@@ -25,8 +25,6 @@ const HR = lazy(() => import('./pages/HR'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Services = lazy(() => import('./pages/Services'));
-const Emergency = lazy(() => import('./pages/Emergency'));
-const Wards = lazy(() => import('./pages/Wards'));
 const AuditLogs = lazy(() => import('./pages/AuditLogs'));
 const PatientDashboard = lazy(() => import('./pages/PatientPortal/Dashboard'));
 const PatientAppointments = lazy(() => import('./pages/PatientPortal/Appointments'));
@@ -129,8 +127,6 @@ function AppContent() {
                 <Route path="/pharmacy" element={<Pharmacy />} />
                 <Route path="/billing" element={<Billing />} />
                 <Route path="/services" element={<Services />} />
-                <Route path="/emergency" element={<Emergency />} />
-                <Route path="/wards" element={<Wards />} />
                 <Route path="/audit-logs" element={<AuditLogs />} />
                 <Route path="/hr" element={<HR />} />
                 <Route path="/reports" element={<Reports />} />

@@ -102,13 +102,10 @@ export default function Services() {
     setIsEditDialogOpen(true);
   };
 
-  const filteredServices = services.filter(s => {
-    const nameStr = (s.name || '').toLowerCase();
-    const categoryStr = (s.category || '').toLowerCase();
-    const termStr = searchTerm.toLowerCase();
-
-    return nameStr.includes(termStr) || categoryStr.includes(termStr);
-  });
+  const filteredServices = services.filter(s => 
+    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.category.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   if (profile?.role === 'patient') return null;
 

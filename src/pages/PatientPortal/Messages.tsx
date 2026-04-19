@@ -36,7 +36,8 @@ export default function PatientMessages() {
 
     const q = query(
       collection(db, 'messages'),
-      where('participants', 'array-contains', user.uid),
+      where('senderId', 'in', [user.uid, selectedStaff.id]),
+      where('receiverId', 'in', [user.uid, selectedStaff.id]),
       orderBy('createdAt', 'asc'),
       limit(50)
     );
@@ -73,11 +74,9 @@ export default function PatientMessages() {
         senderName: profile?.displayName || 'مريض',
         receiverId: selectedStaff.id,
         receiverName: selectedStaff.name,
-        participants: [user.uid, selectedStaff.id],
         content: newMessage,
         read: false,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        createdAt: serverTimestamp()
       });
       setNewMessage('');
     } catch (error) {
@@ -112,7 +111,7 @@ export default function PatientMessages() {
                   className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-right ${selectedStaff.id === s.id ? 'bg-primary/10 text-primary' : 'hover:bg-slate-50'}`}
                 >
                   <Avatar className="h-10 w-10 border">
-                    <AvatarFallback className="bg-slate-100 text-primary font-bold">{(s.name || '').substring(0, 2)}</AvatarFallback>
+                    <AvatarFallback className="bg-slate-100 text-primary font-bold">{s.name.substring(0, 2)}</AvatarFallback>
                   </Avatar>
                   <div className="flex flex-col overflow-hidden">
                     <span className="font-semibold text-sm truncate">{s.name}</span>
@@ -128,7 +127,7 @@ export default function PatientMessages() {
         <Card className="flex-1 flex flex-col overflow-hidden">
           <CardHeader className="p-4 border-b bg-slate-50/50 flex flex-row items-center gap-3">
             <Avatar className="h-10 w-10 border">
-              <AvatarFallback className="bg-primary text-primary-foreground font-bold">{(selectedStaff?.name || '').substring(0, 2)}</AvatarFallback>
+              <AvatarFallback className="bg-primary text-primary-foreground font-bold">{selectedStaff.name.substring(0, 2)}</AvatarFallback>
             </Avatar>
             <div>
               <CardTitle className="text-sm font-bold">{selectedStaff.name}</CardTitle>

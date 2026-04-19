@@ -106,9 +106,7 @@ export default function Reports() {
         
         const patientTrend: {[key: string]: number} = {};
         pSnap.docs.forEach(doc => {
-          const createdAt = doc.data().createdAt;
-          if (!createdAt) return;
-          const date = createdAt.toDate();
+          const date = doc.data().createdAt?.toDate() || new Date();
           const day = date.toLocaleDateString('ar-SA', { weekday: 'long' });
           patientTrend[day] = (patientTrend[day] || 0) + 1;
         });
@@ -125,21 +123,19 @@ export default function Reports() {
           'عيادة': 0,
           'مختبر': 0,
           'أشعة': 0,
-          'صيدلية': 0,
-          'أخرى': 0
+          'صيدلية': 0
         };
         
         bSnap.docs.forEach(doc => {
           const data = doc.data();
-          if (data.status !== 'paid') return; // Only count paid revenue for reports
-          
+          // Filter by doctor (stored as doctorId in bills if applicable)
           if (filters.doctorId !== 'all' && data.doctorId !== filters.doctorId) return;
           
           const type = data.type === 'clinic' ? 'عيادة' : 
                        data.type === 'lab' ? 'مختبر' : 
                        data.type === 'radiology' ? 'أشعة' : 
                        data.type === 'pharmacy' ? 'صيدلية' : 'أخرى';
-          revMap[type] = (revMap[type] || 0) + (data.finalAmount || data.totalAmount || 0);
+          revMap[type] = (revMap[type] || 0) + (data.totalAmount || 0); // Corrected to totalAmount based on schema
         });
 
         // 3. Appointments Status with filters
@@ -154,8 +150,7 @@ export default function Reports() {
           'scheduled': 0,
           'completed': 0,
           'cancelled': 0,
-          'checked-in': 0,
-          'no-show': 0
+          'checked-in': 0
         };
         aSnap.docs.forEach(doc => {
           const status = doc.data().status || 'scheduled';
@@ -175,9 +170,7 @@ export default function Reports() {
             { name: 'ملغي', value: statusMap['cancelled'] || 0 },
           ],
           serviceEfficiency: [
-            { name: 'الكفاءة العامة', value: (statusMap['completed'] + statusMap['scheduled']) > 0 
-                ? Math.round((statusMap['completed'] / (statusMap['completed'] + statusMap['scheduled'] + statusMap['cancelled'])) * 100) 
-                : 0 }
+            { name: 'الكفاءة العامة', value: statusMap['completed'] > 0 ? Math.round((statusMap['completed'] / (statusMap['completed'] + statusMap['scheduled'])) * 100) : 0 }
           ]
         });
       } catch (error) {
@@ -219,22 +212,21 @@ export default function Reports() {
         }));
         filename = 'تقرير_المرضى';
       } else if (type === 'التقارير المالية') {
+        // Since we don't have a bills table in Dexie yet, or complicated financial data,
+        // we export a mock financial summary
         data = [
           { 'الفترة': 'اليوم', 'الإيرادات': 25000, 'المصروفات': 5000 },
           { 'الفترة': 'هذا الأسبوع', 'الإيرادات': 150000, 'المصروفات': 30000 },
         ];
         filename = 'التقرير_المالي';
-      } else if (type === 'تقارير المختبر') {
+      } else {
         const requests = await localDB.labRequests.toArray();
         data = requests.map(r => ({
           'المريض': r.patientName,
           'الحالة': r.status,
-          'الفحوصات': (r.tests || []).map((t: any) => t.name).join(' - ')
+          'الفحوصات': r.tests.map(t => t.name).join(' - ')
         }));
         filename = 'تقرير_المختبر';
-      } else {
-        data = [];
-        filename = 'تقرير_عام';
       }
 
       if (data.length > 0) {
@@ -248,7 +240,6 @@ export default function Reports() {
         toast.error('لا توجد بيانات لتصديرها');
       }
     } catch (error) {
-      console.error("Export error:", error);
       toast.error('فشل في عملية التصدير');
     }
   };

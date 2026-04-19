@@ -63,8 +63,7 @@ export default function Login() {
       } catch (error: any) {
         console.warn("Connection test result:", error.code || error.message);
         // We only care if the error is "offline"
-        const errorMessage = (error.message || '').toLowerCase();
-        if (errorMessage.includes('offline') || error.code === 'unavailable') {
+        if (error.message?.includes('offline') || error.code === 'unavailable') {
           setConnectionError(true);
         }
       }

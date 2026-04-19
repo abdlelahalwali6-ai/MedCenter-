@@ -233,7 +233,7 @@ export default function Appointments() {
     const dateA = toDate(a.date).getTime();
     const dateB = toDate(b.date).getTime();
     if (dateA !== dateB) return dateA - dateB;
-    return (a.startTime || '').localeCompare(b.startTime || '');
+    return a.startTime.localeCompare(b.startTime);
   });
 
   return (
@@ -469,11 +469,11 @@ export default function Appointments() {
                     <TableCell className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center font-bold text-primary text-sm">
-                          {(app.patientName || '').substring(0, 2)}
+                          {app.patientName.substring(0, 2)}
                         </div>
                         <div className="flex flex-col">
                           <span className="font-bold text-slate-900">{app.patientName}</span>
-                          <span className="text-xs text-slate-500 font-mono tracking-tighter">ID: {(app.patientId || '').substring(0, 8)}</span>
+                          <span className="text-xs text-slate-500 font-mono tracking-tighter">ID: {app.patientId.substring(0, 8)}</span>
                         </div>
                       </div>
                     </TableCell>
