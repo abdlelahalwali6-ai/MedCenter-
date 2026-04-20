@@ -4,6 +4,15 @@
  */
 
 export type UserRole = 'admin' | 'doctor' | 'nurse' | 'pharmacist' | 'lab_tech' | 'radiologist' | 'receptionist' | 'patient';
+export type SyncStatus = 'pending' | 'synced' | 'failed';
+
+export interface BaseSyncable {
+  id: string;
+  sync_status: SyncStatus;
+  version: number;
+  last_modified: any;
+  owner_id?: string;
+}
 
 export interface UserProfile {
   uid: string;
@@ -21,11 +30,10 @@ export interface UserProfile {
     start: string;
     end: string;
   };
-  createdAt: any;
+  created_at: any;
 }
 
-export interface Patient {
-  id: string;
+export interface Patient extends BaseSyncable {
   mrn: string; // Medical Record Number (Sequential)
   name: string;
   age?: number | string;
@@ -43,12 +51,10 @@ export interface Patient {
     phone: string;
     relationship: string;
   };
-  createdAt: any;
-  updatedAt: any;
+  created_at: any;
 }
 
-export interface Appointment {
-  id: string;
+export interface Appointment extends BaseSyncable {
   patientId: string;
   patientName: string;
   doctorId: string;
@@ -60,11 +66,10 @@ export interface Appointment {
   type: 'consultation' | 'follow-up' | 'emergency' | 'procedure';
   reason?: string;
   notes?: string;
-  createdAt: any;
+  created_at: any;
 }
 
-export interface MedicalRecord {
-  id: string;
+export interface MedicalRecord extends BaseSyncable {
   patientId: string;
   doctorId: string;
   date: any;
@@ -84,7 +89,7 @@ export interface MedicalRecord {
   prescriptions?: string[]; // IDs
   labRequests?: string[]; // IDs
   radiologyRequests?: string[]; // IDs
-  createdAt: any;
+  created_at: any;
 }
 
 export interface Medication {
@@ -95,15 +100,14 @@ export interface Medication {
   instructions?: string;
 }
 
-export interface Prescription {
-  id: string;
+export interface Prescription extends BaseSyncable {
   patientId: string;
   doctorId: string;
   date: any;
   medications: Medication[];
   status: 'pending' | 'dispensed' | 'cancelled';
   notes?: string;
-  createdAt: any;
+  created_at: any;
 }
 
 export interface LabTest {
@@ -120,8 +124,7 @@ export interface LabTest {
   }[];
 }
 
-export interface LabRequest {
-  id: string;
+export interface LabRequest extends BaseSyncable {
   patientId: string;
   patientName: string;
   doctorId: string;
@@ -132,11 +135,10 @@ export interface LabRequest {
   notes?: string;
   technicianId?: string;
   completedAt?: any;
-  createdAt: any;
+  created_at: any;
 }
 
-export interface RadiologyRequest {
-  id: string;
+export interface RadiologyRequest extends BaseSyncable {
   patientId: string;
   patientName: string;
   doctorId: string;
@@ -148,11 +150,10 @@ export interface RadiologyRequest {
   report?: string;
   technicianId?: string;
   completedAt?: any;
-  createdAt: any;
+  created_at: any;
 }
 
-export interface InventoryItem {
-  id: string;
+export interface InventoryItem extends BaseSyncable {
   name: string;
   scientificName: string;
   commercialName?: string;
@@ -164,7 +165,6 @@ export interface InventoryItem {
   expiryDate?: any;
   supplier?: string;
   price: number;
-  updatedAt: any;
 }
 
 export interface BillItem {
@@ -175,8 +175,7 @@ export interface BillItem {
   costCenter?: string;
 }
 
-export interface Bill {
-  id: string;
+export interface Bill extends BaseSyncable {
   patientId: string;
   patientName: string;
   doctorId?: string;
@@ -195,12 +194,10 @@ export interface Bill {
   type: 'pharmacy' | 'lab' | 'radiology' | 'clinic' | 'other';
   insuranceProvider?: string;
   insuranceCoverage?: number; // percentage
-  createdAt: any;
-  updatedAt: any;
+  created_at: any;
 }
 
-export interface LabCatalogItem {
-  id: string;
+export interface LabCatalogItem extends BaseSyncable {
   name: string;
   category: string;
   price: number;
@@ -210,34 +207,29 @@ export interface LabCatalogItem {
     unit: string;
     normalRange: string;
   }[];
-  createdAt: any;
-  updatedAt: any;
+  created_at: any;
 }
 
-export interface Message {
-  id: string;
+export interface Message extends BaseSyncable {
   senderId: string;
   senderName: string;
   receiverId: string;
   receiverName: string;
   content: string;
   read: boolean;
-  createdAt: any;
+  created_at: any;
 }
 
-export interface ServiceCatalogItem {
-  id: string;
+export interface ServiceCatalogItem extends BaseSyncable {
   name: string;
   category: string;
   price: number;
   costCenter?: string;
   description?: string;
-  createdAt: any;
-  updatedAt: any;
+  created_at: any;
 }
 
-export interface ServiceRequest {
-  id: string;
+export interface ServiceRequest extends BaseSyncable {
   patientId: string;
   patientName: string;
   doctorId: string;
@@ -249,18 +241,17 @@ export interface ServiceRequest {
   status: 'pending' | 'completed' | 'cancelled';
   billed?: boolean;
   notes?: string;
-  createdAt: any;
+  created_at: any;
 }
 
-export interface AuditLog {
-  id: string;
-  userId: string;
-  userName: string;
-  userRole: UserRole;
-  action: string;
-  entityType: 'patient' | 'record' | 'bill' | 'prescription' | 'lab' | 'radiology' | 'inventory' | 'user' | 'appointment';
-  entityId: string;
-  details: string;
-  metadata?: any;
-  createdAt: any;
+export interface AuditLog extends BaseSyncable {
+    userId: string;
+    userName: string;
+    userRole: UserRole;
+    action: string;
+    entityType: 'patient' | 'record' | 'bill' | 'prescription' | 'lab' | 'radiology' | 'inventory' | 'user' | 'appointment';
+    entityId: string;
+    details: string;
+    metadata?: any;
+    created_at: any;
 }

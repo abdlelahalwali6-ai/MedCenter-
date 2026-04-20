@@ -1,5 +1,6 @@
 import { localDB } from './db';
 import { SyncService } from './syncService';
+import { auth } from './firebase';
 
 export class DataService {
   /**
@@ -8,13 +9,16 @@ export class DataService {
   static async create(collectionName: string, data: any) {
     const id = data.id || crypto.randomUUID();
     const now = Date.now();
-    
+    const currentUser = auth.currentUser;
+
     const enrichedData = {
       ...data,
       id,
-      createdAt: now,
-      updatedAt: now,
-      syncStatus: 'pending'
+      created_at: now,
+      last_modified: now,
+      sync_status: 'pending',
+      version: 1,
+      owner_id: currentUser ? currentUser.uid : undefined
     };
 
     const table = (localDB as any)[collectionName];
@@ -38,11 +42,15 @@ export class DataService {
     const table = (localDB as any)[collectionName];
     if (!table) throw new Error(`Table ${collectionName} not found in localDB`);
 
+    const existingItem = await table.get(id);
+    const currentVersion = existingItem ? existingItem.version || 0 : 0;
+
     const now = Date.now();
     const updatePayload = {
       ...data,
-      updatedAt: now,
-      syncStatus: 'pending'
+      last_modified: now,
+      sync_status: 'pending',
+      version: currentVersion + 1
     };
     
     await table.update(id, updatePayload);

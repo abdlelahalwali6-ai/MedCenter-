@@ -37,20 +37,20 @@ export class LocalDB extends Dexie {
   
   constructor() {
     super('HospitalLocalDB');
-    this.version(3).stores({
-      patients: 'id, name, phone, mrn',
-      inventory: 'id, name, scientificName, barcode',
-      labRequests: 'id, patientId, status',
-      appointments: 'id, patientId, doctorId, date, status',
-      medicalRecords: 'id, patientId, doctorId',
-      prescriptions: 'id, patientId, doctorId, status',
-      radiologyRequests: 'id, patientId, status',
-      bills: 'id, patientId, status',
-      messages: 'id, senderId, receiverId',
-      auditLogs: 'id, userId, entityType',
-      serviceCatalog: 'id, name, category',
-      labCatalog: 'id, name, category',
-      serviceRequests: 'id, patientId, status',
+    this.version(4).stores({
+      patients: 'id, sync_status, last_modified, version, name, phone, mrn',
+      inventory: 'id, sync_status, last_modified, version, name, scientificName, barcode',
+      labRequests: 'id, sync_status, last_modified, version, patientId, status',
+      appointments: 'id, sync_status, last_modified, version, patientId, doctorId, date, status',
+      medicalRecords: 'id, sync_status, last_modified, version, patientId, doctorId',
+      prescriptions: 'id, sync_status, last_modified, version, patientId, doctorId, status',
+      radiologyRequests: 'id, sync_status, last_modified, version, patientId, status',
+      bills: 'id, sync_status, last_modified, version, patientId, status',
+      messages: 'id, sync_status, last_modified, version, senderId, receiverId',
+      auditLogs: 'id, sync_status, last_modified, version, userId, entityType',
+      serviceCatalog: 'id, sync_status, last_modified, version, name, category',
+      labCatalog: 'id, sync_status, last_modified, version, name, category',
+      serviceRequests: 'id, sync_status, last_modified, version, patientId, status',
       syncMetaData: 'id',
       counters: 'id',
       deletedItems: 'id, collectionName',
@@ -73,7 +73,7 @@ export class LocalDB extends Dexie {
           email: adminEmail,
           displayName: 'مسؤول النظام (أمان)',
           role: 'admin',
-          createdAt: Date.now()
+          created_at: Date.now()
         });
         console.log("Local admin stub seeded.");
       }

@@ -15,7 +15,6 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { localDB } from './db';
-import { toast } from 'sonner';
 
 const SYNC_COLLECTIONS = [
   { name: 'patients', firestoreName: 'patients', roles: ['admin', 'doctor', 'nurse', 'receptionist', 'pharmacist', 'lab_tech', 'radiologist'] },
@@ -91,7 +90,7 @@ export class SyncService {
       if (col.roles && !col.roles.includes(effectiveRole)) return;
 
       // 2. Set up query
-      let constraints = [orderBy('updatedAt', 'desc'), limit(50)];
+      let constraints = [orderBy('last_modified', 'desc'), limit(50)];
       
       if (effectiveRole === 'patient' && col.patientFilter && effectiveUserId) {
         constraints.unshift(where(col.patientFilter, '==', effectiveUserId) as any);
@@ -103,17 +102,22 @@ export class SyncService {
       const unsubscribe = onSnapshot(q, (snapshot) => {
         snapshot.docChanges().forEach(async (change) => {
           if (change.type === 'added' || change.type === 'modified') {
-            const data = change.doc.data();
-            data.id = change.doc.id;
-            this.sanitizeFromFirestore(data);
+            const remoteData = change.doc.data();
+            remoteData.id = change.doc.id;
+            this.sanitizeFromFirestore(remoteData);
             
             const table = (localDB as any)[col.name];
-            const existing = await table.get(data.id);
+            const localData = await table.get(remoteData.id);
             
-            // Conflict resolution: only update if remote is actually newer
-            if (!existing || this.getTimestampMs(data.updatedAt) > this.getTimestampMs(existing.updatedAt)) {
-              await table.put(data);
-              console.log(`[Sync] realtime: updated local ${col.name}/${data.id}`);
+            // Conflict resolution
+            if (!localData || (remoteData.version > localData.version) || 
+                (remoteData.version === localData.version && this.getTimestampMs(remoteData.last_modified) > this.getTimestampMs(localData.last_modified))) {
+                if(localData && localData.sync_status === 'pending') {
+                    console.log(`[Sync] realtime: local ${col.name}/${remoteData.id} has pending changes, not overwriting`);
+                    return;
+                }
+              await table.put(remoteData);
+              console.log(`[Sync] realtime: updated local ${col.name}/${remoteData.id}`);
             }
           }
           if (change.type === 'removed') {
@@ -134,7 +138,7 @@ export class SyncService {
     // Also trigger an immediate push of any pending local changes
     this.syncDeletions();
     SYNC_COLLECTIONS.forEach(col => {
-      this.pushLocalChanges(col.name, col.firestoreName, 0);
+      this.pushLocalChanges(col.name, col.firestoreName);
     });
   }
 
@@ -155,7 +159,7 @@ export class SyncService {
 
     try {
       const docRef = doc(db, col.firestoreName, item.id);
-      const data = { ...item, updatedAt: Timestamp.now() };
+      const data = { ...item, last_modified: Timestamp.now(), sync_status: 'synced', owner_id: auth.currentUser.uid };
       this.sanitizeForFirestore(data);
       await setDoc(docRef, data, { merge: true });
       
@@ -166,6 +170,8 @@ export class SyncService {
       console.log(`[Sync] Successfully pushed item ${item.id} to ${col.firestoreName}`);
     } catch (error) {
       console.error(`[Sync] Failed to push item ${item.id}:`, error);
+      // Mark as failed
+      await (localDB as any)[localName].update(item.id, { sync_status: 'failed' });
     }
   }
 
@@ -197,20 +203,16 @@ export class SyncService {
     const lastSynced = meta?.lastSynced || 0;
     const now = Date.now();
 
-    await this.pushLocalChanges(localName, firestoreName, lastSynced);
+    await this.pushLocalChanges(localName, firestoreName);
     await this.pullRemoteChanges(localName, firestoreName, lastSynced, userRole, userId, patientFilter);
     await localDB.syncMetaData.put({ id: localName, lastSynced: now });
   }
 
-  private static async pushLocalChanges(localName: string, firestoreName: string, lastSynced: number) {
+  private static async pushLocalChanges(localName: string, firestoreName: string) {
     const table = (localDB as any)[localName];
     if (!table) return;
 
-    const localItems = await table.toArray();
-    const dirtyItems = localItems.filter((item: any) => {
-      const updatedAt = this.getTimestampMs(item.updatedAt || item.createdAt);
-      return updatedAt > lastSynced;
-    });
+    const dirtyItems = await table.where('sync_status').equals('pending').toArray();
 
     if (dirtyItems.length === 0) return;
 
@@ -220,12 +222,16 @@ export class SyncService {
       
       batch.forEach((item: any) => {
         const docRef = doc(db, firestoreName, item.id);
-        const data = { ...item };
+        const data = { ...item, sync_status: 'synced', last_modified: Timestamp.now() };
         this.sanitizeForFirestore(data);
         writeBatchObj.set(docRef, data, { merge: true });
       });
 
       await writeBatchObj.commit();
+
+      // Now update local items
+      const updatedItems = batch.map(item => ({ ...item, sync_status: 'synced', last_modified: new Date() }));
+      await table.bulkPut(updatedItems);
     }
   }
 
@@ -235,8 +241,8 @@ export class SyncService {
 
     const lastSyncedDate = new Date(lastSynced);
     let constraints = [
-      where('updatedAt', '>', Timestamp.fromDate(lastSyncedDate)),
-      orderBy('updatedAt', 'asc'),
+      where('last_modified', '>', Timestamp.fromDate(lastSyncedDate)),
+      orderBy('last_modified', 'asc'),
       limit(2000)
     ];
 
@@ -255,7 +261,25 @@ export class SyncService {
       return data;
     });
 
-    await table.bulkPut(remoteItems);
+    // Conflict resolution
+    const localItems = await table.bulkGet(remoteItems.map(item => item.id));
+    const itemsToPut = [];
+    for(let i=0; i<remoteItems.length; i++) {
+        const remoteItem = remoteItems[i];
+        const localItem = localItems[i];
+        if(!localItem || (remoteItem.version > localItem.version) || 
+            (remoteItem.version === localItem.version && this.getTimestampMs(remoteItem.last_modified) > this.getTimestampMs(localItem.last_modified))) {
+            if(localItem && localItem.sync_status === 'pending') {
+                console.log(`[Sync] pull: local ${localName}/${remoteItem.id} has pending changes, not overwriting`);
+                continue;
+            }
+            itemsToPut.push(remoteItem);
+        }
+    }
+
+    if(itemsToPut.length > 0) {
+        await table.bulkPut(itemsToPut);
+    }
   }
 
   private static getTimestampMs(val: any): number {
@@ -275,7 +299,7 @@ export class SyncService {
       const val = obj[key];
       if (val instanceof Date) {
         obj[key] = Timestamp.fromDate(val);
-      } else if (typeof val === 'number' && (key === 'updatedAt' || key === 'createdAt' || key === 'date')) {
+      } else if (typeof val === 'number' && (key === 'last_modified' || key === 'created_at' || key === 'date')) {
         if (val > 1000000000) { 
           obj[key] = Timestamp.fromMillis(val < 10000000000 ? val * 1000 : val);
         }
@@ -295,4 +319,3 @@ export class SyncService {
     }
   }
 }
-
