@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -348,8 +349,8 @@ export function AppSidebar() {
           </div>
         </div>
         
-        <div className="mt-2 group-data-[collapsible=icon]:hidden">
-          <SyncStatus />
+        <div className="mt-2">
+          <SyncStatus collapsed={isCollapsed} />
         </div>
 
         <SidebarMenu className="mt-2">

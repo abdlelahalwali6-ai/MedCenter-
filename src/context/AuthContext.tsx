@@ -1,13 +1,8 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '@/src/lib/firebase';
-import { UserProfile } from '@/src/types';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
+import { UserProfile } from '@/types';
 
 interface AuthContextType {
   user: User | null;
@@ -30,47 +25,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const authUnsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
-      
-      if (firebaseUser) {
-        try {
-          const docRef = doc(db, 'users', firebaseUser.uid);
-          const docSnap = await getDoc(docRef);
-          
+      if (!firebaseUser) {
+        setProfile(null);
+        setLoading(false);
+      }
+    });
+
+    return () => authUnsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      const profileUnsubscribe = onSnapshot(
+        doc(db, 'users', user.uid),
+        (docSnap) => {
           if (docSnap.exists()) {
             setProfile(docSnap.data() as UserProfile);
           } else {
             setProfile(null);
           }
-        } catch (error) {
+          setLoading(false);
+        },
+        (error) => {
           console.error("Error fetching user profile:", error);
           setProfile(null);
+          setLoading(false);
         }
-      } else {
-        setProfile(null);
-      }
-      
+      );
+      return () => profileUnsubscribe();
+    } else {
       setLoading(false);
-    });
+      setProfile(null);
+    }
+  }, [user]);
 
-    return () => unsubscribe();
-  }, []);
+  const roles = useMemo(() => {
+    const userRole = profile?.role;
+    return {
+      isAdmin: userRole === 'admin',
+      isDoctor: userRole === 'doctor',
+      isNurse: userRole === 'nurse',
+      isPharmacist: userRole === 'pharmacist',
+      isLabTech: userRole === 'lab_tech',
+      isReceptionist: userRole === 'receptionist',
+      isPatient: userRole === 'patient',
+    };
+  }, [profile]);
 
-  const isAdmin = profile?.role === 'admin' || user?.email?.toLowerCase() === 'abdlelahalwali6@gmail.com';
-
-  const value = {
+  const value = useMemo(() => ({
     user,
     profile,
     loading,
-    isAdmin,
-    isDoctor: !isAdmin && profile?.role === 'doctor',
-    isNurse: !isAdmin && profile?.role === 'nurse',
-    isPharmacist: !isAdmin && profile?.role === 'pharmacist',
-    isLabTech: !isAdmin && profile?.role === 'lab_tech',
-    isReceptionist: !isAdmin && profile?.role === 'receptionist',
-    isPatient: !isAdmin && profile?.role === 'patient',
-  };
+    ...roles,
+  }), [user, profile, loading, roles]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

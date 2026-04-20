@@ -4,808 +4,233 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, orderBy, updateDoc, deleteDoc, doc, serverTimestamp, where, addDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, updateDoc, doc, where } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '@/src/lib/firebase';
 import { DataService } from '@/src/lib/dataService';
 import { formatArabicDate } from '@/src/lib/dateUtils';
-import { localDB } from '@/src/lib/db';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { logAction } from '@/src/lib/audit';
 import { InventoryItem, Prescription } from '@/src/types';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from '@/components/ui/table';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger,
-  DialogFooter 
-} from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
-import { Search, PackagePlus, AlertTriangle, Pill, CheckCircle, ClipboardList, Edit, Trash2, Barcode as BarcodeIcon, ScanLine, Filter, Download, X, Printer, DollarSign, AlertCircle } from 'lucide-react';
+import { Search, PackagePlus, AlertTriangle, Pill, CheckCircle, ClipboardList, Edit, Trash2, Loader2, ScanLine, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/src/context/AuthContext';
-import { BarcodeScanner } from '@/src/components/BarcodeScanner';
 import { Badge } from '@/components/ui/badge';
-import Barcode from 'react-barcode';
-
-const COMMON_DRUGS = [
-  { name: 'بندول اكسترا', scientificName: 'Paracetamol + Caffeine', commercialName: 'Panadol Extra', category: 'medication', price: 1200, unit: 'علبة', barcode: '6291016140012' },
-  { name: 'أدول 500 ملجم', scientificName: 'Paracetamol', commercialName: 'Adol', category: 'medication', price: 800, unit: 'علبة', barcode: '6291016140029' },
-  { name: 'بروفين 400 ملجم', scientificName: 'Ibuprofen', commercialName: 'Brufen', category: 'medication', price: 1500, unit: 'علبة', barcode: '6291016140036' },
-  { name: 'فلاجيل 500 ملجم', scientificName: 'Metronidazole', commercialName: 'Flagyl', category: 'medication', price: 2200, unit: 'علبة', barcode: '6291016140043' },
-  { name: 'أموكسيل 500 ملجم', scientificName: 'Amoxicillin', commercialName: 'Amoxil', category: 'medication', price: 2500, unit: 'علبة', barcode: '6291016140050' },
-  { name: 'فولتارين 50 ملجم', scientificName: 'Diclofenac Sodium', commercialName: 'Voltaren', category: 'medication', price: 1800, unit: 'علبة', barcode: '6291016140067' },
-  { name: 'جلوكوفاج 500 ملجم', scientificName: 'Metformin', commercialName: 'Glucophage', category: 'medication', price: 3000, unit: 'علبة', barcode: '6291016140074' },
-  { name: 'أيزوميد 20 ملجم', scientificName: 'Omeprazole', commercialName: 'Isomed', category: 'medication', price: 2800, unit: 'علبة', barcode: '6291016140081' },
-];
 
 export default function Pharmacy() {
   const { profile, isAdmin } = useAuth();
 
   if (profile?.role === 'patient') return null;
   
-  const inventory = useLiveQuery(() => localDB.inventory.toArray(), []) || [];
+  const [loading, setLoading] = useState(true);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [scannerMode, setScannerMode] = useState<'search' | 'add' | 'edit' | 'pos'>('search');
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
-  const [isLabelDialogOpen, setIsLabelDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [cart, setCart] = useState<{item: InventoryItem, qty: number}[]>([]);
-  const [posPatient, setPosPatient] = useState('');
-  
-  const [newItem, setNewItem] = useState<Partial<InventoryItem>>({
-    name: '',
-    scientificName: '',
-    commercialName: '',
-    category: 'medication',
-    quantity: 0,
-    price: 0,
-    unit: 'علبة',
-    barcode: '',
-    minThreshold: 10
-  });
+
+  const [newItem, setNewItem] = useState<Partial<InventoryItem>>({ name: '', quantity: 0, price: 0, minThreshold: 10 });
 
   useEffect(() => {
-    if (!profile || profile.role === 'patient') return;
+    if (!profile) return;
+    setLoading(true);
+    const unsubs: (()=>void)[] = [];
 
-    // Prescriptions (Still using Firestore for live coordination of orders)
-    const qPres = query(collection(db, 'prescriptions'), orderBy('createdAt', 'desc'));
-    const unsubPres = onSnapshot(qPres, (snapshot) => {
-      setPrescriptions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Prescription[]);
-    });
+    unsubs.push(onSnapshot(query(collection(db, 'inventory'), orderBy('name')), 
+      (snap) => { setInventory(snap.docs.map(d => ({id: d.id, ...d.data()})) as InventoryItem[]); setLoading(false); },
+      (err) => { handleFirestoreError(err, OperationType.LIST, 'inventory'); setLoading(false); }
+    ));
 
-    return () => { unsubPres(); };
+    unsubs.push(onSnapshot(query(collection(db, 'prescriptions'), orderBy('createdAt', 'desc')), 
+      (snap) => setPrescriptions(snap.docs.map(d => ({id: d.id, ...d.data()})) as Prescription[]),
+      (err) => handleFirestoreError(err, OperationType.LIST, 'prescriptions')
+    ));
+
+    return () => unsubs.forEach(unsub => unsub());
   }, [profile]);
   
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newItem.name || !newItem.scientificName) {
-      toast.error('يرجى إدخال اسم الصنف والاسم العلمي');
-      return;
-    }
+    setIsSubmitting(true);
     try {
-      const itemData = {
-        ...newItem,
-        quantity: Number(newItem.quantity) || 0,
-        price: Number(newItem.price) || 0,
-        minThreshold: Number(newItem.minThreshold) || 10,
-      };
-
-      const id = await DataService.create('inventory', itemData);
-
-      await logAction(
-        profile,
-        'إضافة صنف للمخزون',
-        'inventory',
-        id,
-        `تم إضافة ${newItem.name} (${newItem.scientificName}) للمخزون`
-      );
-
-      toast.success('تم إضافة الصنف للمخزون');
+      await DataService.create('inventory', newItem);
+      toast.success('تم إضافة الصنف');
       setIsAddDialogOpen(false);
-      setNewItem({ name: '', scientificName: '', commercialName: '', category: 'medication', quantity: 0, price: 0, unit: 'علبة', barcode: '', minThreshold: 10 });
+      setNewItem({ name: '', quantity: 0, price: 0, minThreshold: 10 });
     } catch (error) {
-      toast.error('فشل إضافة الصنف');
-    }
-  };
-
-  const seedCommonDrugs = async () => {
-    if (!isAdmin) return;
-    const loadingToast = toast.loading('جاري إضافة الأصناف الشائعة...');
-    try {
-      for (const drug of COMMON_DRUGS) {
-        const existing = inventory.find(i => i.barcode === drug.barcode);
-        if (!existing) {
-          await DataService.create('inventory', {
-            ...drug,
-            quantity: 50,
-            minThreshold: 10
-          });
-        }
-      }
-      toast.dismiss(loadingToast);
-      toast.success('تم تحديث المخزون بالأصناف الشائعة بنجاح');
-    } catch (error) {
-      toast.dismiss(loadingToast);
-      toast.error('حدث خطأ أثناء إضافة الأصناف');
-    }
-  };
-
-  const handleScan = (barcode: string) => {
-    if (scannerMode === 'search') {
-      setSearchTerm(barcode);
-      const found = inventory.find(i => i.barcode === barcode);
-      if (found) {
-        toast.success(`تم العثور على: ${found.name}`);
-      } else {
-        toast.info('باركود جديد، يمكنك استخدامه لإضافة صنف');
-      }
-      setIsScannerOpen(false);
-    } else if (scannerMode === 'add') {
-      setNewItem(prev => ({ ...prev, barcode }));
-      toast.success('تم مسح الباركود بنجاح');
-      setIsScannerOpen(false);
-    } else if (scannerMode === 'edit' && selectedItem) {
-      setSelectedItem(prev => prev ? { ...prev, barcode } : null);
-      toast.success('تم تحديث الباركود');
-      setIsScannerOpen(false);
-    } else if (scannerMode === 'pos') {
-      const found = inventory.find(i => i.barcode === barcode);
-      if (found) {
-        addToCart(found);
-        toast.success(`تمت إضافة ${found.name} للسلة`);
-      } else {
-        toast.error('لم يتم العثور على الصنف');
-      }
-      setIsScannerOpen(false);
-    }
-  };
-
-  const addToCart = (item: InventoryItem) => {
-    setCart(prev => {
-      const existing = prev.find(p => p.item.id === item.id);
-      if (existing) {
-        return prev.map(p => p.item.id === item.id ? { ...p, qty: p.qty + 1 } : p);
-      }
-      return [...prev, { item, qty: 1 }];
-    });
-  };
-
-  const removeFromCart = (id: string) => {
-    setCart(prev => prev.filter(p => p.item.id !== id));
-  };
-
-  const clearCart = () => {
-    setCart([]);
-    setPosPatient('');
-  };
-
-  const totalCartPrice = cart.reduce((acc, p) => acc + (p.item.price * p.qty), 0);
-
-  const handleCheckout = async () => {
-    if (cart.length === 0) return;
-    try {
-      const billData = {
-        patientId: '', // Direct sale might not have patient ID
-        patientName: posPatient || 'زبون نقدي',
-        totalAmount: totalCartPrice,
-        finalAmount: totalCartPrice,
-        paidAmount: totalCartPrice,
-        status: 'paid',
-        type: 'pharmacy',
-        items: cart.map(c => ({
-          description: c.item.name,
-          amount: c.item.price,
-          quantity: c.qty
-        }))
-      };
-
-      const billId = await DataService.create('bills', billData);
-
-      for (const entry of cart) {
-        await DataService.update('inventory', entry.item.id, {
-          quantity: Math.max(0, entry.item.quantity - entry.qty)
-        });
-      }
-
-      await logAction(
-        profile,
-        'عملية بيع أدوية',
-        'bill',
-        billId,
-        `عملية بيع بقيمة ${totalCartPrice} ر.ي لـ ${posPatient || 'زبون نقدي'}`
-      );
-
-      toast.success('تم إتمام البيع بنجاح');
-      clearCart();
-    } catch (error) {
-      toast.error('فشل إتمام العملية');
+      handleFirestoreError(error, OperationType.CREATE, 'inventory item');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleEditItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem) return;
+    setIsSubmitting(true);
     try {
       await DataService.update('inventory', selectedItem.id, selectedItem);
-      toast.success('تم تحديث بيانات الصنف');
-      setIsEditDialogOpen(false);
+      toast.success('تم تحديث الصنف');
+      setSelectedItem(null);
     } catch (error) {
-      toast.error('فشل تحديث البيانات');
+      handleFirestoreError(error, OperationType.UPDATE, 'inventory item');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleDeleteItem = async (id: string) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذا الصنف؟')) return;
+    if (!window.confirm('هل أنت متأكد؟')) return;
     try {
       await DataService.delete('inventory', id);
-      toast.success('تم حذف الصنف من المخزون');
+      toast.success('تم حذف الصنف');
     } catch (error) {
-      toast.error('فشل حذف الصنف');
+      handleFirestoreError(error, OperationType.DELETE, 'inventory item');
     }
   };
 
   const handleDispense = async (prescriptionId: string) => {
-    const prescription = prescriptions.find(p => p.id === prescriptionId);
-    if (!prescription) return;
-
+    const pres = prescriptions.find(p => p.id === prescriptionId);
+    if (!pres) return;
+    setIsSubmitting(true);
+    const toastId = toast.loading('جاري صرف الوصفة...');
     try {
-      let totalPrice = 0;
-      const dispensedMeds: string[] = [];
-
-      for (const med of prescription.medications) {
+      for (const med of pres.medications) {
         const invItem = inventory.find(i => i.name === med.name);
-        if (invItem) {
-          totalPrice += invItem.price || 0;
-          dispensedMeds.push(med.name);
-          
-          await DataService.update('inventory', invItem.id, {
-            quantity: Math.max(0, invItem.quantity - 1)
-          });
+        if (invItem && invItem.quantity > 0) {
+          await DataService.update('inventory', invItem.id, { quantity: invItem.quantity - 1 });
         }
       }
-
-      await DataService.update('prescriptions', prescriptionId, {
-        status: 'dispensed'
-      });
-
-      if (totalPrice > 0) {
-        await DataService.create('bills', {
-          patientId: prescription.patientId,
-          patientName: prescription.patientName,
-          totalAmount: totalPrice,
-          finalAmount: totalPrice,
-          paidAmount: 0,
-          status: 'pending',
-          type: 'pharmacy',
-          items: dispensedMeds.map(name => ({
-            description: `دواء: ${name}`,
-            amount: inventory.find(i => i.name === name)?.price || 0,
-            quantity: 1
-          }))
-        });
-      }
-
-      toast.success('تم صرف الوصفة وإنشاء الفاتورة بنجاح');
+      await DataService.update('prescriptions', pres.id, { status: 'dispensed' });
+      toast.success('تم صرف الوصفة بنجاح', { id: toastId });
     } catch (error) {
-      console.error('Error dispensing:', error);
-      toast.error('فشل صرف الوصفة');
+      handleFirestoreError(error, OperationType.UPDATE, 'prescription');
+      toast.error('فشل صرف الوصفة', { id: toastId });
+    } finally {
+      setIsSubmitting(false);
     }
   };
+  
+  const addToCart = (item: InventoryItem) => {
+    setCart(prev => {
+      const existing = prev.find(p => p.item.id === item.id);
+      if (existing) {
+        return prev.map(p => p.item.id === item.id ? { ...p, qty: p.qty + 1 } : p);
+      } else {
+        return [...prev, { item, qty: 1 }];
+      }
+    });
+  }
+
+  const handleCheckout = async () => {
+    if (cart.length === 0) return;
+    setIsSubmitting(true);
+    try {
+        const total = cart.reduce((sum, i) => sum + (i.item.price * i.qty), 0);
+        await DataService.create('bills', {
+            type: 'pharmacy',
+            patientName: 'زبون نقدي',
+            totalAmount: total,
+            finalAmount: total,
+            status: 'paid',
+            items: cart.map(i => ({ description: i.item.name, quantity: i.qty, amount: i.item.price }))
+        });
+        for (const i of cart) {
+            const newQty = i.item.quantity - i.qty;
+            await DataService.update('inventory', i.item.id, { quantity: newQty });
+        }
+        toast.success('تمت عملية البيع');
+        setCart([]);
+    } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, 'POS transaction');
+    } finally {
+        setIsSubmitting(false);
+    }
+  }
 
   const filteredInventory = inventory.filter(item => 
-    item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.scientificName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.commercialName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.barcode === searchTerm
+    (item.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
     <div className="p-6 space-y-6" dir="rtl">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">الصيدلية والمخزون</h1>
-        <div className="flex gap-2">
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger render={<Button className="gap-2" />}>
-              <PackagePlus size={18} /> إضافة صنف جديد
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]" dir="rtl">
-              <DialogHeader>
-                <DialogTitle>إضافة صنف للمخزون</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleAddItem} className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>اسم الدواء / الصنف</Label>
-                  <Input value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} required />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>الكمية</Label>
-                    <Input type="number" value={newItem.quantity} onChange={e => setNewItem({...newItem, quantity: parseInt(e.target.value)})} required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>السعر (ر.ي)</Label>
-                    <Input type="number" value={newItem.price} onChange={e => setNewItem({...newItem, price: parseInt(e.target.value)})} required />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>الوحدة</Label>
-                  <Input value={newItem.unit} onChange={e => setNewItem({...newItem, unit: e.target.value})} placeholder="علبة، شريط..." required />
-                </div>
-                <div className="space-y-2">
-                  <Label>حد التنبيه (الحد الأدنى)</Label>
-                  <Input type="number" value={newItem.minThreshold} onChange={e => setNewItem({...newItem, minThreshold: parseInt(e.target.value)})} required />
-                </div>
-                <Button type="submit" className="w-full">حفظ الصنف</Button>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </div>
+        <h1 className="text-2xl font-bold">الصيدلية</h1>
+        <Button onClick={() => setIsAddDialogOpen(true)}><PackagePlus size={18} /> إضافة صنف</Button>
       </div>
 
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]" dir="rtl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Edit className="text-primary" />
-              تعديل بيانات الصنف
-            </DialogTitle>
-          </DialogHeader>
-          {selectedItem && (
-            <form onSubmit={handleEditItem} className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>الاسم الشائع</Label>
-                  <Input value={selectedItem.name} onChange={e => setSelectedItem({...selectedItem, name: e.target.value})} required />
-                </div>
-                <div className="space-y-2">
-                  <Label>الاسم العلمي</Label>
-                  <Input value={selectedItem.scientificName} onChange={e => setSelectedItem({...selectedItem, scientificName: e.target.value})} required />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>الاسم التجاري</Label>
-                  <Input value={selectedItem.commercialName || ''} onChange={e => setSelectedItem({...selectedItem, commercialName: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <Label>الباركود</Label>
-                  <div className="flex gap-2">
-                    <Input value={selectedItem.barcode || ''} onChange={e => setSelectedItem({...selectedItem, barcode: e.target.value})} />
-                    <Button type="button" variant="outline" size="icon" onClick={() => { setScannerMode('edit'); setIsScannerOpen(true); }}>
-                      <ScanLine size={18} />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>الكمية</Label>
-                  <Input type="number" value={selectedItem.quantity} onChange={e => setSelectedItem({...selectedItem, quantity: parseInt(e.target.value)})} required />
-                </div>
-                <div className="space-y-2">
-                  <Label>السعر (ر.ي)</Label>
-                  <Input type="number" value={selectedItem.price || 0} onChange={e => setSelectedItem({...selectedItem, price: parseInt(e.target.value)})} required />
-                </div>
-                <div className="space-y-2">
-                  <Label>الوحدة</Label>
-                  <Input value={selectedItem.unit} onChange={e => setSelectedItem({...selectedItem, unit: e.target.value})} required />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>حد التنبيه (الحد الأدنى)</Label>
-                <Input type="number" value={selectedItem.minThreshold} onChange={e => setSelectedItem({...selectedItem, minThreshold: parseInt(e.target.value)})} required />
-              </div>
-              <Button type="submit" className="w-full h-11">تحديث البيانات</Button>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isLabelDialogOpen} onOpenChange={setIsLabelDialogOpen}>
-        <DialogContent className="max-w-sm" dir="rtl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <BarcodeIcon className="text-primary" />
-              ملصق الصنف
-            </DialogTitle>
-          </DialogHeader>
-          {selectedItem && (
-            <div className="flex flex-col items-center py-6 gap-4 border rounded-xl bg-slate-50" id="pharmacy-label">
-              <div className="text-center">
-                <h4 className="font-bold text-lg">{selectedItem.name}</h4>
-                <p className="text-xs text-slate-500">{selectedItem.scientificName}</p>
-              </div>
-              <div className="bg-white p-4 rounded shadow-sm border border-slate-200">
-                <Barcode 
-                  value={selectedItem.barcode || selectedItem.id} 
-                  width={1.5} 
-                  height={50} 
-                  fontSize={14}
-                />
-              </div>
-              <p className="font-bold text-lg text-primary">{selectedItem.price.toLocaleString()} ر.ي</p>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsLabelDialogOpen(false)} className="w-full">إغلاق</Button>
-            <Button onClick={() => window.print()} className="w-full gap-2"><Printer size={16} /> طباعة</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Tabs defaultValue="inventory" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 h-12">
-          <TabsTrigger value="inventory" className="gap-2">
-            <PackagePlus size={18} /> المخزون الدوائي
-          </TabsTrigger>
-          <TabsTrigger value="pos" className="gap-2">
-            <ScanLine size={18} /> بيع مباشر (POS)
-          </TabsTrigger>
-          <TabsTrigger value="prescriptions" className="gap-2">
-            <ClipboardList size={18} /> الوصفات الطبية
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="inventory" className="space-y-6 mt-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="bg-sky-50 border-sky-200">
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="p-3 bg-sky-500 rounded-full text-white">
-                  <Pill size={24} />
-                </div>
-                <div>
-                  <p className="text-sm text-sky-700 font-medium">إجمالي الأصناف</p>
-                  <p className="text-2xl font-bold text-sky-900">{inventory.length}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-amber-50 border-amber-200">
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="p-3 bg-amber-500 rounded-full text-white">
-                  <AlertTriangle size={24} />
-                </div>
-                <div>
-                  <p className="text-sm text-amber-700 font-medium">أصناف قاربت على النفاد</p>
-                  <p className="text-2xl font-bold text-amber-900">
-                    {inventory.filter(i => i.quantity <= i.minThreshold).length}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-emerald-50 border-emerald-200">
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="p-3 bg-emerald-500 rounded-full text-white">
-                  <CheckCircle size={24} />
-                </div>
-                <div>
-                  <p className="text-sm text-emerald-700 font-medium">وصفات تم صرفها</p>
-                  <p className="text-2xl font-bold text-emerald-900">
-                    {prescriptions.filter(p => p.status === 'dispensed').length}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="flex flex-col md:flex-row items-center gap-4 bg-white p-4 rounded-xl border border-border shadow-sm">
-            <div className="relative flex-1">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-              <Input 
-                placeholder="البحث بالاسم العلمي، التجاري، أو الباركود..." 
-                className="pr-10 h-11"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div className="flex gap-2 w-full md:w-auto">
-              <Button variant="outline" className="gap-2 h-11 flex-1 md:flex-none" onClick={() => { setScannerMode('search'); setIsScannerOpen(true); }}>
-                <ScanLine size={18} /> مسح باركود
-              </Button>
-              <Button variant="ghost" className="gap-2 h-11" onClick={() => setSearchTerm('')}>
-                <X size={18} /> مسح البحث
-              </Button>
-            </div>
-          </div>
-
-          <div className="panel overflow-hidden border-none shadow-md rounded-xl">
+      <Tabs defaultValue="inventory">
+        <TabsList><TabsTrigger value="inventory">المخزون</TabsTrigger><TabsTrigger value="pos">بيع مباشر</TabsTrigger><TabsTrigger value="prescriptions">الوصفات</TabsTrigger></TabsList>
+        
+        <TabsContent value="inventory" className="mt-4">
+            <Input placeholder="بحث..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            {loading ? <Loader2 className="animate-spin mx-auto my-10"/> : 
             <Table>
-              <TableHeader className="bg-slate-50">
-                <TableRow>
-                  <TableHead className="w-[250px]">الصنف (الاسم العلمي)</TableHead>
-                  <TableHead>الباركود</TableHead>
-                  <TableHead>الكمية / الوحدة</TableHead>
-                  <TableHead>السعر</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead className="text-left">الإجراءات</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredInventory.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                      <div className="flex flex-col items-center gap-2">
-                        <Search size={48} className="text-slate-200" />
-                        <p>لا يوجد نتائج تطابق بحثك</p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : filteredInventory.map((item) => (
-                  <TableRow key={item.id} className="hover:bg-slate-50 transition-colors">
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="font-bold text-slate-800">{item.name}</span>
-                        <span className="text-xs text-primary font-medium">{item.scientificName}</span>
-                        {item.commercialName && <span className="text-[10px] text-slate-400">{item.commercialName}</span>}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2 font-mono text-xs text-slate-500">
-                        <BarcodeIcon size={14} className="text-slate-400" />
-                        {item.barcode || '---'}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <span className={`font-bold ${item.quantity <= item.minThreshold ? 'text-danger' : 'text-slate-700'}`}>
-                          {item.quantity}
-                        </span>
-                        <span className="text-xs text-slate-500">{item.unit}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-bold text-emerald-600">{item.price.toLocaleString()}</span>
-                      <span className="text-[10px] text-slate-400 mr-1">ر.ي</span>
-                    </TableCell>
-                    <TableCell>
-                      {item.quantity <= item.minThreshold ? (
-                        <Badge variant="destructive" className="bg-red-50 text-red-600 border-red-100 hover:bg-red-50">منخفض</Badge>
-                      ) : (
-                        <Badge variant="secondary" className="bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-50">متوفر</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-left">
-                      <div className="flex justify-end gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          className="h-8 w-8 text-primary hover:bg-primary/10"
-                          onClick={() => {
-                            setSelectedItem(item);
-                            setIsEditDialogOpen(true);
-                          }}
-                        >
-                          <Edit size={16} />
-                        </Button>
-                        {isAdmin && (
-                          <>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8 text-primary hover:bg-primary/10"
-                              onClick={() => {
-                                setSelectedItem(item);
-                                setIsLabelDialogOpen(true);
-                              }}
-                              title="طباعة باركود"
-                            >
-                              <BarcodeIcon size={16} />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8 text-danger hover:bg-danger/10"
-                              onClick={() => handleDeleteItem(item.id)}
-                            >
-                              <Trash2 size={16} />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="pos" className="mt-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <ScanLine className="text-primary" />
-                    مسح الأصناف للبيع
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex gap-2">
-                    <Input 
-                      placeholder="امسح الباركود أو ابحث عن صنف لبيعه..." 
-                      className="h-12 text-lg" 
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          const val = (e.target as HTMLInputElement).value;
-                          const found = inventory.find(i => i.barcode === val || i.name === val);
-                          if (found) {
-                            addToCart(found);
-                            (e.target as HTMLInputElement).value = '';
-                            toast.success(`تمت إضافة ${found.name}`);
-                          } else {
-                            toast.error('لم يتم العثور على الصنف');
-                          }
-                        }
-                      }}
-                    />
-                    <Button size="lg" className="gap-2" onClick={() => { setScannerMode('pos'); setIsScannerOpen(true); }}>
-                      <ScanLine size={20} /> مسح بالكاميرا
-                    </Button>
-                  </div>
-                  
-                  <div className="border rounded-xl overflow-hidden">
-                    <Table>
-                      <TableHeader className="bg-slate-50">
-                        <TableRow>
-                          <TableHead>الصنف</TableHead>
-                          <TableHead className="w-[100px]">السعر</TableHead>
-                          <TableHead className="w-[150px]">الكمية</TableHead>
-                          <TableHead className="w-[100px]">الإجمالي</TableHead>
-                          <TableHead className="w-[50px]"></TableHead>
+                <TableHeader><TableRow><TableHead>الصنف</TableHead><TableHead>الكمية</TableHead><TableHead>السعر</TableHead><TableHead>الحالة</TableHead><TableHead>إجراء</TableHead></TableRow></TableHeader>
+                <TableBody>
+                    {filteredInventory.map(item => (
+                        <TableRow key={item.id}>
+                            <TableCell>{item.name}</TableCell>
+                            <TableCell>{item.quantity}</TableCell>
+                            <TableCell>{item.price} ر.ي</TableCell>
+                            <TableCell><Badge variant={item.quantity > item.minThreshold ? 'default' : 'destructive'}>{item.quantity > item.minThreshold ? 'متوفر' : 'منخفض'}</Badge></TableCell>
+                            <TableCell><Button variant="ghost" size="sm" onClick={() => setSelectedItem(item)}><Edit size={16}/></Button><Button variant="ghost" size="sm" onClick={() => handleDeleteItem(item.id)}><Trash2 size={16}/></Button></TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {cart.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
-                              السلة فارغة. ابدأ بمسح باركود الأدوية للبيع.
-                            </TableCell>
-                          </TableRow>
-                        ) : cart.map((p) => (
-                          <TableRow key={p.item.id}>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="font-bold">{p.item.name}</span>
-                                <span className="text-xs text-muted-foreground">{p.item.scientificName}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>{p.item.price.toLocaleString()}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => {
-                                  if (p.qty > 1) {
-                                    setCart(prev => prev.map(c => c.item.id === p.item.id ? {...c, qty: c.qty - 1} : c));
-                                  }
-                                }}>-</Button>
-                                <span className="w-8 text-center font-bold">{p.qty}</span>
-                                <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => addToCart(p.item)}>+</Button>
-                              </div>
-                            </TableCell>
-                            <TableCell className="font-bold">{(p.item.price * p.qty).toLocaleString()}</TableCell>
-                            <TableCell>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-danger" onClick={() => removeFromCart(p.item.id)}>
-                                <Trash2 size={16} />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="space-y-6">
-              <Card className="border-primary/20 shadow-md">
-                <CardHeader className="bg-primary/5">
-                  <CardTitle className="text-lg">ملخص العملية</CardTitle>
-                </CardHeader>
-                <CardContent className="p-6 space-y-4">
-                  <div className="space-y-2">
-                    <Label>اسم المريض (اختياري)</Label>
-                    <Input 
-                      placeholder="اسم المريض لربط الفاتورة" 
-                      value={posPatient}
-                      onChange={e => setPosPatient(e.target.value)}
-                    />
-                  </div>
-                  
-                  <div className="space-y-3 pt-4 border-t">
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>عدد الأصناف:</span>
-                      <span>{cart.length}</span>
-                    </div>
-                    <div className="flex justify-between text-lg font-bold">
-                      <span>الإجمالي الكلي:</span>
-                      <span className="text-primary">{totalCartPrice.toLocaleString()} ر.ي</span>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 gap-2 pt-4">
-                    <Button size="lg" className="w-full text-lg h-14" disabled={cart.length === 0} onClick={handleCheckout}>
-                      <DollarSign size={20} className="ml-2" /> إتمام البيع والتحصيل
-                    </Button>
-                    <Button variant="ghost" className="w-full text-danger" onClick={clearCart} disabled={cart.length === 0}>
-                      إلغاء السلة
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card className="bg-sky-50 border-sky-100">
-                <CardContent className="p-4 flex gap-3 text-sky-800">
-                  <AlertCircle size={20} className="shrink-0" />
-                  <p className="text-xs leading-relaxed">
-                    يتم خصم الكميات تلقائياً من المخزون عند إتمام البيع. تأكد من صحة الباركود الممسوح.
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+                    ))}
+                </TableBody>
+            </Table>}
         </TabsContent>
 
-        <TabsContent value="prescriptions" className="mt-6">
-          <div className="panel">
+        <TabsContent value="pos" className="mt-4">
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <h3>الأصناف</h3>
+                    <Input placeholder="بحث لإضافة للسلة..." onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                            const found = inventory.find(i => i.name.toLowerCase() === (e.target as HTMLInputElement).value.toLowerCase());
+                            if(found) addToCart(found);
+                            (e.target as HTMLInputElement).value = '';
+                        }
+                    }} />
+                    {/* List clickable items to add to cart */}
+                </div>
+                <div>
+                    <h3>السلة</h3>
+                    {cart.map(i => <div key={i.item.id}>{i.item.name} x {i.qty}</div>)}
+                    <p>الإجمالي: {cart.reduce((sum, i) => sum + (i.item.price * i.qty), 0)} ر.ي</p>
+                    <Button onClick={handleCheckout} disabled={isSubmitting || cart.length === 0}>{isSubmitting ? <Loader2 className="animate-spin" /> : <><DollarSign size={16}/> إتمام البيع</>}</Button>
+                </div>
+            </div>
+        </TabsContent>
+
+        <TabsContent value="prescriptions" className="mt-4">
+            {loading ? <Loader2 className="animate-spin mx-auto my-10"/> : 
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>المريض</TableHead>
-                  <TableHead>الأدوية</TableHead>
-                  <TableHead>الطبيب</TableHead>
-                  <TableHead>التاريخ</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead className="text-left">الإجراءات</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {prescriptions.map((pres) => (
-                  <TableRow key={pres.id}>
-                    <TableCell className="font-bold">{pres.patientName}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        {pres.medications.map((m: any, i: number) => (
-                          <span key={i} className="text-xs">{m.name} ({m.dosage})</span>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell>{pres.doctorName}</TableCell>
-                    <TableCell>{formatArabicDate(pres.createdAt)}</TableCell>
-                    <TableCell>
-                      <span className={`px-2 py-1 rounded text-[0.7rem] font-bold ${
-                        pres.status === 'dispensed' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'
-                      }`}>
-                        {pres.status === 'dispensed' ? 'تم الصرف' : 'بانتظار الصرف'}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-left">
-                      {pres.status === 'pending' && (
-                        <Button variant="outline" size="sm" onClick={() => handleDispense(pres.id)}>صرف الآن</Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                <TableHeader><TableRow><TableHead>المريض</TableHead><TableHead>الطبيب</TableHead><TableHead>الأدوية</TableHead><TableHead>الحالة</TableHead><TableHead>إجراء</TableHead></TableRow></TableHeader>
+                <TableBody>
+                    {prescriptions.map(pres => (
+                        <TableRow key={pres.id}>
+                            <TableCell>{pres.patientName}</TableCell>
+                            <TableCell>{pres.doctorName}</TableCell>
+                            <TableCell>{pres.medications.map(m => m.name).join(', ')}</TableCell>
+                            <TableCell><Badge variant={pres.status === 'pending' ? 'warning' : 'success'}>{pres.status}</Badge></TableCell>
+                            <TableCell>{pres.status === 'pending' && <Button onClick={() => handleDispense(pres.id)} disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin"/> : 'صرف'}</Button>}</TableCell>
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>}
         </TabsContent>
       </Tabs>
+
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}><DialogContent><DialogHeader><DialogTitle>إضافة صنف</DialogTitle></DialogHeader><form onSubmit={handleAddItem}><Input placeholder="الاسم" value={newItem.name} onChange={e=>setNewItem({...newItem, name: e.target.value})} /><Input type="number" placeholder="الكمية" value={newItem.quantity} onChange={e=>setNewItem({...newItem, quantity: Number(e.target.value)})} /><Input type="number" placeholder="السعر" value={newItem.price} onChange={e=>setNewItem({...newItem, price: Number(e.target.value)})} /><Button type="submit" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin"/> : 'إضافة'}</Button></form></DialogContent></Dialog>
+      {selectedItem && <Dialog open={!!selectedItem} onOpenChange={() => setSelectedItem(null)}><DialogContent><DialogHeader><DialogTitle>تعديل صنف</DialogTitle></DialogHeader><form onSubmit={handleEditItem}><Input placeholder="الاسم" value={selectedItem.name} onChange={e=>setSelectedItem({...selectedItem, name: e.target.value})} /><Input type="number" placeholder="الكمية" value={selectedItem.quantity} onChange={e=>setSelectedItem({...selectedItem, quantity: Number(e.target.value)})} /><Input type="number" placeholder="السعر" value={selectedItem.price} onChange={e=>setSelectedItem({...selectedItem, price: Number(e.target.value)})} /><Button type="submit" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin"/> : 'تعديل'}</Button></form></DialogContent></Dialog>}
     </div>
   );
 }

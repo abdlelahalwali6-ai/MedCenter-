@@ -201,6 +201,7 @@ export default function Reports() {
     let filename = '';
 
     try {
+        setLoading(true);
       if (type === 'تقارير المرضى') {
         const patients = await localDB.patients.toArray();
         data = patients.map(p => ({
@@ -212,12 +213,18 @@ export default function Reports() {
         }));
         filename = 'تقرير_المرضى';
       } else if (type === 'التقارير المالية') {
-        // Since we don't have a bills table in Dexie yet, or complicated financial data,
-        // we export a mock financial summary
-        data = [
-          { 'الفترة': 'اليوم', 'الإيرادات': 25000, 'المصروفات': 5000 },
-          { 'الفترة': 'هذا الأسبوع', 'الإيرادات': 150000, 'المصروفات': 30000 },
-        ];
+        const bills = await localDB.bills.toArray();
+        if (bills.length === 0) {
+            toast.info('لا توجد بيانات فواتير محلية لإنشاء التقرير');
+            return;
+        }
+        data = bills.map(b => ({
+            'رقم الفاتورة': b.id,
+            'اسم المريض': b.patientName || 'غير متوفر',
+            'المبلغ الإجمالي': b.totalAmount,
+            'الحالة': b.status,
+            'تاريخ الإنشاء': formatArabicDate(b.createdAt)
+        }));
         filename = 'التقرير_المالي';
       } else {
         const requests = await localDB.labRequests.toArray();
@@ -241,6 +248,9 @@ export default function Reports() {
       }
     } catch (error) {
       toast.error('فشل في عملية التصدير');
+      console.error("Export error:", error);
+    } finally {
+        setLoading(false);
     }
   };
 
@@ -248,24 +258,6 @@ export default function Reports() {
     toast.info(`تم مسح الباركود: ${barcode}. جارٍ البحث في التقارير...`);
     setIsScannerOpen(false);
   };
-
-  // Mocked trend data based on current counts for visual appeal if database is fresh
-  const data = [
-    { name: 'السبت', patients: Math.floor(patientsCount * 0.1) + 20, revenue: 4500 },
-    { name: 'الأحد', patients: Math.floor(patientsCount * 0.12) + 25, revenue: 5200 },
-    { name: 'الاثنين', patients: Math.floor(patientsCount * 0.08) + 15, revenue: 3800 },
-    { name: 'الثلاثاء', patients: Math.floor(patientsCount * 0.15) + 30, revenue: 6500 },
-    { name: 'الأربعاء', patients: Math.floor(patientsCount * 0.11) + 22, revenue: 4800 },
-    { name: 'الخميس', patients: Math.floor(patientsCount * 0.14) + 28, revenue: 5900 },
-    { name: 'الجمعة', patients: Math.floor(patientsCount * 0.05) + 10, revenue: 2000 },
-  ];
-
-  const pieData = [
-    { name: 'المخزون', value: inventoryCount },
-    { name: 'المرضى', value: patientsCount },
-    { name: 'المختبر', value: labRequestsCount },
-    { name: 'أخرى', value: 10 },
-  ];
 
   const reportTypes = [
     { title: 'تقارير المرضى', icon: Users, description: 'إحصائيات المرضى الجدد والتركيبة السكانية' },
@@ -354,7 +346,7 @@ export default function Reports() {
                 <SelectItem value="all">جميع المراكز</SelectItem>
                 {filterLists.costCenters.map(c => (
                   <SelectItem key={c} value={c}>{c}</SelectItem>
-                ))}
+                ))}\
               </SelectContent>
             </Select>
           </div>

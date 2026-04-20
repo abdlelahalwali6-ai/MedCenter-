@@ -1,99 +1,84 @@
-import tailwindcss from '@tailwindcss/vite';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig, loadEnv } from 'vite';
-import { VitePWA } from 'vite-plugin-pwa';
-import { fileURLToPath } from 'url';
-import { dirname, resolve } from 'path';
+import { VitePWA, VitePWAOptions } from 'vite-plugin-pwa';
+import path from 'path';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, '.', '');
-  return {
-    base: '/',
-    plugins: [
-      react(),
-      tailwindcss(),
-      VitePWA({
-        registerType: 'autoUpdate',
-        includeAssets: [],
-        manifest: {
-          name: 'نظام أمان الطبي المتكامل',
-          short_name: 'نظام أمان',
-          description: 'نظام إدارة طبي احترافي يعمل بدون إنترنت مع مزامنة سحابية كاملة',
-          theme_color: '#0ea5e9',
-          background_color: '#ffffff',
-          display: 'standalone',
-          orientation: 'portrait',
-          categories: ['medical', 'health', 'management'],
-          icons: [
-            {
-              src: 'https://cdn-icons-png.flaticon.com/512/3209/3209074.png',
-              sizes: '192x192',
-              type: 'image/png'
-            },
-            {
-              src: 'https://cdn-icons-png.flaticon.com/512/3209/3209074.png',
-              sizes: '512x512',
-              type: 'image/png'
-            },
-            {
-              src: 'https://cdn-icons-png.flaticon.com/512/3209/3209074.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'any maskable'
-            }
-          ]
-        },
-        workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webmanifest}'],
-          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-          runtimeCaching: [
-            {
-              urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'google-fonts-cache',
-                expiration: {
-                  maxEntries: 10,
-                  maxAgeSeconds: 60 * 60 * 24 * 365 // <--- 1 year
-                },
-                cacheableResponse: {
-                  statuses: [0, 203]
-                }
-              }
-            }
-          ]
-        },
-        devOptions: {
-          enabled: false // Disabled in dev to avoid conflicts with HMR-less env
+const pwaOptions: Partial<VitePWAOptions> = {
+  registerType: 'autoUpdate',
+  devOptions: {
+    enabled: true,
+  },
+  workbox: {
+    globPatterns: ['**/*.{js,css,html,ico,png,svg,json,vue,txt,woff2}'],
+    runtimeCaching: [
+      {
+        urlPattern: /^https?:\/\/fonts\.googleapis\.com\/.*/i,
+        handler: 'CacheFirst',
+        options: {
+          cacheName: 'google-fonts-cache',
+          expiration: {
+            maxEntries: 10,
+            maxAgeSeconds: 60 * 60 * 24 * 365 // <== 365 days
+          },
+          cacheableResponse: {
+            statuses: [0, 200]
+          }
         }
-      })
+      },
+      {
+        urlPattern: /^https?:\/\/fonts\.gstatic\.com\/.*/i,
+        handler: 'CacheFirst',
+        options: {
+          cacheName: 'gstatic-fonts-cache',
+          expiration: {
+            maxEntries: 10,
+            maxAgeSeconds: 60 * 60 * 24 * 365 // <== 365 days
+          },
+          cacheableResponse: {
+            statuses: [0, 200]
+          }
+        }
+      }
+    ]
+  },
+  includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+  manifest: {
+    name: 'نظام أمان الطبي',
+    short_name: 'أمان الطبي',
+    description: 'نظام إدارة شامل للمراكز الطبية مع دعم كامل للعمل دون اتصال بالإنترنت',
+    theme_color: '#ffffff',
+    icons: [
+      {
+        src: 'pwa-192x192.png',
+        sizes: '192x192',
+        type: 'image/png',
+      },
+      {
+        src: 'pwa-512x512.png',
+        sizes: '512x512',
+        type: 'image/png',
+      },
+      {
+        src: 'pwa-512x512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any maskable',
+      },
     ],
-    define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY || null),
+  },
+};
+
+export default defineConfig({
+  plugins: [
+    react(),
+    VitePWA(pwaOptions)
+  ],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
     },
-    resolve: {
-      alias: {
-        '@': resolve(__dirname, '.'),
-      },
-    },
-    build: {
-      outDir: 'dist',
-      assetsDir: 'assets',
-      emptyOutDir: true,
-      chunkSizeWarningLimit: 2000,
-      rollupOptions: {
-        output: {
-          manualChunks: undefined,
-        },
-      },
-    },
-    server: {
-      port: 3000,
-      host: '0.0.0.0',
-      hmr: process.env.DISABLE_HMR !== 'true',
-    },
-  };
+  },
+  build: {
+    sourcemap: true,
+  },
 });
