@@ -30,7 +30,7 @@ jobs:
         node-version: '22.x'
         cache: 'npm'
 
-    - name: Check Node version
+    - name: Check Node versversionversionion
       run: node -v
 
     - name: Install dependencies
