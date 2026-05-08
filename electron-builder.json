@@ -1,0 +1,11 @@
+{
+  "appId": "com.medcenter.app",
+  "productName": "MedCenter",
+  "directories": {
+    "output": "dist"
+  },
+  "win": {
+    "target": "nsis",
+    "icon": "icon.ico"
+  }
+}
