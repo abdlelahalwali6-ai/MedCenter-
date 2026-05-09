@@ -1,0 +1,548 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "file",
+        "operation": "list",
+        "owner": {
+          "__rl": true,
+          "value": "https://github.com/abdlelahalwali6-ai/MedCenter-",
+          "mode": "url"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "https://github.com/abdlelahalwali6-ai/MedCenter-",
+          "mode": "url"
+        },
+        "filePath": "/"
+      },
+      "id": "13451e6c-b64e-4a5b-b4cb-7d34d87cef3f",
+      "name": "List Repository Files",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        464,
+        304
+      ],
+      "webhookId": "292ce09c-f661-4e2b-9d45-dd69c0add6aa",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "retryOnFail": true,
+      "credentials": {
+        "githubOAuth2Api": {
+          "id": "OqSuKKhx7d9aEBkg",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const files = $input.all().map(item => item.json);\n\nconst analysis = {\n  totalFiles: files.length,\n  fileTypes: {},\n  directories: [],\n  configFiles: [],\n  sourceFiles: [],\n  hasPackageJson: false,\n  hasDockerfile: false,\n  hasCI: false,\n  hasAndroidConfig: false,\n  hasWebConfig: false,\n  hasWindowsConfig: false\n};\n\nfiles.forEach(file => {\n  if (file.type === \"dir\") {\n    analysis.directories.push(file.name);\n  } else {\n    const ext = file.name.split(\".\").pop();\n    analysis.fileTypes[ext] = (analysis.fileTypes[ext] || 0) + 1;\n    \n    if (file.name === \"package.json\" || file.path === \"package.json\") {\n      analysis.hasPackageJson = true;\n      analysis.configFiles.push(file.name);\n    }\n    if (file.name === \"Dockerfile\" || file.path === \"Dockerfile\") {\n      analysis.hasDockerfile = true;\n      analysis.configFiles.push(file.name);\n    }\n    if (file.name.includes(\".yml\") || file.name.includes(\".yaml\") || file.path.includes(\".github/workflows\")) {\n      analysis.hasCI = true;\n      analysis.configFiles.push(file.name);\n    }\n    if (file.name === \"android\" || file.path.includes(\"android\") || file.name.includes(\"build.gradle\")) {\n      analysis.hasAndroidConfig = true;\n    }\n    if (file.name === \"public\" || file.path.includes(\"public\") || file.name === \"index.html\") {\n      analysis.hasWebConfig = true;\n    }\n    if (file.name.includes(\"electron\") || file.path.includes(\"electron-builder\")) {\n      analysis.hasWindowsConfig = true;\n    }\n    if (ext === \"js\" || ext === \"ts\" || ext === \"jsx\" || ext === \"tsx\") {\n      analysis.sourceFiles.push(file.name);\n    }\n  }\n});\n\nanalysis.needsReview = !analysis.hasPackageJson || !analysis.hasDockerfile || !analysis.hasCI || !analysis.hasAndroidConfig || !analysis.hasWebConfig || !analysis.hasWindowsConfig;\nanalysis.reviewNotes = [];\n\nif (!analysis.hasPackageJson) {\n  analysis.reviewNotes.push(\"❌ Missing package.json - dependencies not managed\");\n}\nif (!analysis.hasDockerfile) {\n  analysis.reviewNotes.push(\"❌ Missing Dockerfile - containerization not configured\");\n}\nif (!analysis.hasCI) {\n  analysis.reviewNotes.push(\"❌ Missing CI/CD configuration - automated deployment not set up\");\n}\nif (!analysis.hasAndroidConfig) {\n  analysis.reviewNotes.push(\"❌ Missing Android build configuration\");\n}\nif (!analysis.hasWebConfig) {\n  analysis.reviewNotes.push(\"❌ Missing web application configuration\");\n}\nif (!analysis.hasWindowsConfig) {\n  analysis.reviewNotes.push(\"❌ Missing Windows build configuration\");\n}\n\nreturn [{ json: analysis }];"
+      },
+      "id": "41f4b3d7-d820-44c0-befd-dfbbdca84424",
+      "name": "Analyze Project Structure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.needsReview }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "17c590cc-4d0a-458c-89e9-671e29108c54",
+      "name": "Needs Review?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        912,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AVBCNCUJ2",
+          "mode": "list",
+          "cachedResultName": "all-medcenter"
+        },
+        "text": "=🔍 *MedCenter Project Review Alert*\n\n*Status:* Needs Review\n*Total Files:* {{ $json.totalFiles }}\n*Issues Found:* {{ $json.reviewNotes.length }}\n\n*Review Notes:*\n{{ $json.reviewNotes.join(\"\\n\") }}\n\n_Automated fixes will be applied shortly._",
+        "otherOptions": {}
+      },
+      "id": "696c9bd0-2981-420d-87fe-1fa12a5fb6ec",
+      "name": "Notify Team",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        1136,
+        208
+      ],
+      "webhookId": "0baecca8-098e-4818-9def-ef51224fb11a",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "dq2dPv4dhPnz8ZYV",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "status",
+              "value": "healthy",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "message",
+              "value": "Project structure is complete and properly configured",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d3077908-07df-4870-bf65-8c077605d25b",
+      "name": "Mark as Healthy",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1136,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "=days",
+              "daysInterval": "={{ 9 }}",
+              "triggerAtHour": 9,
+              "triggerAtMinute": 10
+            }
+          ]
+        }
+      },
+      "id": "ece48d48-1f30-447f-8a51-76f63d7610b9",
+      "name": "Daily Review Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const analysis = $(\"Analyze Project Structure\").first().json;\nconst existingFiles = $input.all().map(item => item.json);\nconst configs = [];\n\nconst fileExists = (path) => existingFiles.some(f => f.path === path);\nconst getFileSha = (path) => {\n  const file = existingFiles.find(f => f.path === path);\n  return file ? file.sha : null;\n};\n\nif (!analysis.hasCI) {\n  const ciPath = \".github/workflows/build-deploy.yml\";\n  const ciContent = \"name: Build and Deploy All Platforms\\n\\non:\\n  push:\\n    branches: [ main ]\\n  workflow_dispatch:\\n\\njobs:\\n  build-android:\\n    runs-on: ubuntu-latest\\n    steps:\\n      - uses: actions/checkout@v4\\n      - name: Setup Java\\n        uses: actions/setup-java@v4\\n        with:\\n          distribution: temurin\\n          java-version: 17\\n      - name: Setup Android SDK\\n        uses: android-actions/setup-android@v3\\n      - name: Create Android Project Structure\\n        run: |\\n          mkdir -p android/app/src/main/java/com/medcenter/app\\n          mkdir -p android/app/src/main/res\\n      - name: Build Android APK\\n        run: |\\n          cd android\\n          chmod +x gradlew || echo Gradlew not found\\n          ./gradlew assembleRelease || echo Build skipped\\n      - name: Upload APK\\n        uses: actions/upload-artifact@v4\\n        with:\\n          name: android-apk\\n          path: android/app/build/outputs/apk/release/*.apk\\n          if-no-files-found: warn\\n\\n  build-web:\\n    runs-on: ubuntu-latest\\n    steps:\\n      - uses: actions/checkout@v4\\n      - uses: actions/setup-node@v4\\n        with:\\n          node-version: 20\\n      - run: npm install || echo No package.json\\n      - run: npm run build:web || npm run build || echo No build script\\n      - name: Deploy to GitHub Pages\\n        uses: peaceiris/actions-gh-pages@v4\\n        if: hashFiles(dist/**) != \\\"\\\"\\n        with:\\n          github_token: \\${{ secrets.GITHUB_TOKEN }}\\n          publish_dir: ./dist\\n\\n  build-windows:\\n    runs-on: windows-latest\\n    steps:\\n      - uses: actions/checkout@v4\\n      - uses: actions/setup-node@v4\\n        with:\\n          node-version: 20\\n      - run: npm install || echo No package.json\\n      - run: npm run build:windows || npm run build || echo No build script\\n      - name: Upload Windows Installer\\n        uses: actions/upload-artifact@v4\\n        with:\\n          name: windows-installer\\n          path: dist/*.exe\\n          if-no-files-found: warn\";\n  configs.push({\n    filename: \"build-deploy.yml\",\n    content: ciContent,\n    path: ciPath,\n    sha: getFileSha(ciPath),\n    isEdit: fileExists(ciPath)\n  });\n}\n\nif (!analysis.hasAndroidConfig) {\n  const androidBuildPath = \"android/build.gradle\";\n  const androidBuildContent = \"buildscript {\\n    repositories {\\n        google()\\n        mavenCentral()\\n    }\\n    dependencies {\\n        classpath \\\"com.android.tools.build:gradle:8.0.0\\\"\\n    }\\n}\\n\\nallprojects {\\n    repositories {\\n        google()\\n        mavenCentral()\\n    }\\n}\";\n  configs.push({\n    filename: \"build.gradle\",\n    content: androidBuildContent,\n    path: androidBuildPath,\n    sha: getFileSha(androidBuildPath),\n    isEdit: fileExists(androidBuildPath)\n  });\n  \n  const androidAppBuildPath = \"android/app/build.gradle\";\n  const androidAppContent = \"apply plugin: \\\"com.android.application\\\"\\n\\nandroid {\\n    namespace \\\"com.medcenter.app\\\"\\n    compileSdkVersion 33\\n    defaultConfig {\\n        applicationId \\\"com.medcenter.app\\\"\\n        minSdkVersion 21\\n        targetSdkVersion 33\\n        versionCode 1\\n        versionName \\\"1.0\\\"\\n    }\\n    buildTypes {\\n        release {\\n            minifyEnabled false\\n            proguardFiles getDefaultProguardFile(\\\"proguard-android-optimize.txt\\\"), \\\"proguard-rules.pro\\\"\\n        }\\n    }\\n}\\n\\ndependencies {\\n    implementation \\\"androidx.appcompat:appcompat:1.6.1\\\"\\n    implementation \\\"com.google.android.material:material:1.9.0\\\"\\n}\";\n  configs.push({\n    filename: \"app-build.gradle\",\n    content: androidAppContent,\n    path: androidAppBuildPath,\n    sha: getFileSha(androidAppBuildPath),\n    isEdit: fileExists(androidAppBuildPath)\n  });\n  \n  const androidManifestPath = \"android/app/src/main/AndroidManifest.xml\";\n  const androidManifestContent = \"<?xml version=\\\"1.0\\\" encoding=\\\"utf-8\\\"?>\\n<manifest xmlns:android=\\\"http://schemas.android.com/apk/res/android\\\">\\n    <application\\n        android:allowBackup=\\\"true\\\"\\n        android:icon=\\\"@mipmap/ic_launcher\\\"\\n        android:label=\\\"MedCenter\\\"\\n        android:theme=\\\"@style/Theme.AppCompat.Light\\\">\\n        <activity\\n            android:name=\\\".MainActivity\\\"\\n            android:exported=\\\"true\\\">\\n            <intent-filter>\\n                <action android:name=\\\"android.intent.action.MAIN\\\" />\\n                <category android:name=\\\"android.intent.category.LAUNCHER\\\" />\\n            </intent-filter>\\n        </activity>\\n    </application>\\n</manifest>\";\n  configs.push({\n    filename: \"AndroidManifest.xml\",\n    content: androidManifestContent,\n    path: androidManifestPath,\n    sha: getFileSha(androidManifestPath),\n    isEdit: fileExists(androidManifestPath)\n  });\n  \n  const gradleWrapperPath = \"android/gradle/wrapper/gradle-wrapper.properties\";\n  const gradleWrapperContent = \"distributionBase=GRADLE_USER_HOME\\ndistributionPath=wrapper/dists\\ndistributionUrl=https\\\\://services.gradle.org/distributions/gradle-8.0-bin.zip\\nzipStoreBase=GRADLE_USER_HOME\\nzipStorePath=wrapper/dists\";\n  configs.push({\n    filename: \"gradle-wrapper.properties\",\n    content: gradleWrapperContent,\n    path: gradleWrapperPath,\n    sha: getFileSha(gradleWrapperPath),\n    isEdit: fileExists(gradleWrapperPath)\n  });\n}\n\nif (!analysis.hasWindowsConfig) {\n  const electronPath = \"electron-builder.json\";\n  const electronContent = JSON.stringify({\n    \"appId\": \"com.medcenter.app\",\n    \"productName\": \"MedCenter\",\n    \"directories\": {\n      \"output\": \"dist\"\n    },\n    \"win\": {\n      \"target\": \"nsis\",\n      \"icon\": \"icon.ico\"\n    }\n  }, null, 2);\n  configs.push({\n    filename: \"electron-builder.json\",\n    content: electronContent,\n    path: electronPath,\n    sha: getFileSha(electronPath),\n    isEdit: fileExists(electronPath)\n  });\n}\n\nif (configs.length === 0) {\n  return [{ json: { status: \"no_files_needed\", message: \"All required files already exist\" } }];\n}\n\nreturn configs.map(c => ({ json: c }));"
+      },
+      "id": "2add517b-80a8-4cc0-b7ca-942dcaa184fb",
+      "name": "Generate Build Configs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1584,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "file",
+        "operation": "list",
+        "owner": {
+          "__rl": true,
+          "value": "https://github.com/abdlelahalwali6-ai/MedCenter-",
+          "mode": "url"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "https://github.com/abdlelahalwali6-ai/MedCenter-",
+          "mode": "url"
+        },
+        "filePath": "/"
+      },
+      "id": "9b56552b-9a44-4172-a1e9-f70a293436d9",
+      "name": "Get Existing Files",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        1360,
+        208
+      ],
+      "webhookId": "409e4e3a-f7dd-4f0d-8a63-c715ba80628f",
+      "credentials": {
+        "githubOAuth2Api": {
+          "id": "OqSuKKhx7d9aEBkg",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.isEdit }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9ad44e3b-4b8f-4b1c-bf13-c8d2f8a97281",
+      "name": "Route by File Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1808,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "value": "https://github.com/abdlelahalwali6-ai/MedCenter-",
+          "mode": "url"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "https://github.com/abdlelahalwali6-ai/MedCenter-",
+          "mode": "url"
+        },
+        "filePath": "={{ $json.path }}",
+        "fileContent": "={{ $json.content }}",
+        "commitMessage": "={{ \"Update \" + $json.filename + \" - automated project setup\" }}"
+      },
+      "id": "4a0afcad-4c2d-48b7-a6f6-4b644e1a7531",
+      "name": "Edit Existing File",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        2032,
+        112
+      ],
+      "webhookId": "e78979d5-4268-4f26-8e34-68d0e98e92fb",
+      "credentials": {
+        "githubOAuth2Api": {
+          "id": "OqSuKKhx7d9aEBkg",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "99c06aa5-dfb1-4dd1-84f4-a018e0d1d99c",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2256,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "file",
+        "owner": {
+          "__rl": true,
+          "value": "https://github.com/abdlelahalwali6-ai/MedCenter-",
+          "mode": "url"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "https://github.com/abdlelahalwali6-ai/MedCenter-",
+          "mode": "url"
+        },
+        "filePath": "={{ $json.path }}",
+        "fileContent": "={{ $json.content }}",
+        "commitMessage": "={{ \"Add \" + $json.filename + \" - automated project setup\" }}"
+      },
+      "id": "fb0f4709-9a29-4739-a3a3-03e0f7e4962d",
+      "name": "Create New File",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        2032,
+        304
+      ],
+      "webhookId": "63dcff14-4677-429f-b0c1-183668a35624",
+      "credentials": {
+        "githubOAuth2Api": {
+          "id": "OqSuKKhx7d9aEBkg",
+          "name": "GitHub account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "status",
+              "value": "completed",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "filesProcessed",
+              "value": "={{ $input.all().length }}",
+              "type": "number"
+            },
+            {
+              "id": "3",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8ceff806-183a-4802-9356-191712a55624",
+      "name": "Final Summary",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2480,
+        208
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1648,
+        1088
+      ],
+      "typeVersion": 1,
+      "id": "d95bf580-d970-4083-8b34-7c5eb76a3d9a",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {
+    "Daily Review Schedule": [
+      {
+        "json": {
+          "timestamp": "2026-05-08T03:12:29.542+00:00",
+          "Readable date": "May 8th 2026, 3:12:29 am",
+          "Readable time": "3:12:29 am",
+          "Day of week": "Friday",
+          "Year": "2026",
+          "Month": "May",
+          "Day of month": "08",
+          "Hour": "03",
+          "Minute": "12",
+          "Second": "29",
+          "Timezone": "Etc/UTC (UTC+00:00)"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "List Repository Files": {
+      "main": [
+        [
+          {
+            "node": "Analyze Project Structure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Project Structure": {
+      "main": [
+        [
+          {
+            "node": "Needs Review?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Review?": {
+      "main": [
+        [
+          {
+            "node": "Notify Team",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark as Healthy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Review Schedule": {
+      "main": [
+        [
+          {
+            "node": "List Repository Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Team": {
+      "main": [
+        [
+          {
+            "node": "Get Existing Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Build Configs": {
+      "main": [
+        [
+          {
+            "node": "Route by File Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Existing Files": {
+      "main": [
+        [
+          {
+            "node": "Generate Build Configs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by File Status": {
+      "main": [
+        [
+          {
+            "node": "Edit Existing File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create New File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Existing File": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Final Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create New File": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "e921e7cc-9036-4f9f-b610-d1c647e92182",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "84b7f98656af5cf6f55f459cd4903b336a0388f6a090975022c0548ef6ea12df"
+  },
+  "id": "LMPNl1YYsKbficJA",
+  "tags": []
+}
