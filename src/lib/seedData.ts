@@ -129,7 +129,7 @@ export async function seedStaff() {
       for (const profile of staffProfiles) {
         // These are demo profiles and won't have actual Firebase Auth accounts
         // but it's enough for an Admin to see and manage them.
-        const tempId = 'demo-' + profile.role + '-' + Math.random().toString(36).substring(2, 9);
+        const tempId = 'demo-' + profile.role + '-' + crypto.randomUUID();
         await setDoc(doc(db, 'users', tempId), {
           ...profile,
           uid: tempId,
