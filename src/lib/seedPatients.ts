@@ -1,4 +1,5 @@
 import { collection, addDoc, serverTimestamp, getDocs, query, where, setDoc, doc, Timestamp } from 'firebase/firestore';
+import { randomInt } from 'crypto';
 import { db, getNextMRN } from './firebase';
 
 const firstNames = ['أحمد', 'علي', 'محمد', 'سارة', 'فاطمة', 'زينب', 'حسن', 'حسين', 'نورة', 'خالد'];
@@ -6,11 +7,12 @@ const lastNames = ['الحيمي', 'الوالي', 'الصبري', 'عقلان',
 const cities = ['صنعاء', 'عدن', 'تعز', 'الحديدة', 'إب'];
 
 function getRandomElement<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
+  return arr[randomInt(arr.length)];
 }
 
 function getRandomDate(start: Date, end: Date): Date {
-  return new Date(start.getTime() + Math.random() * (end.getTime() - start.getTime()));
+  const rangeMs = end.getTime() - start.getTime();
+  return new Date(start.getTime() + randomInt(rangeMs));
 }
 
 export async function seedPatientsAndRecords(patientCount = 15) {
@@ -52,10 +54,10 @@ export async function seedPatientsAndRecords(patientCount = 15) {
       mrn: await getNextMRN(),
       fullName: `${firstName} ${lastName}`,
       dob: Timestamp.fromDate(dob),
-      gender: Math.random() > 0.5 ? 'Male' : 'Female',
-      phone: `77${Math.floor(1000000 + Math.random() * 9000000)}`,
+      gender: randomInt(2) === 0 ? 'Male' : 'Female',
+      phone: `77${randomInt(1000000, 10000000)}`,
       address: `${getRandomElement(cities)}, اليمن`,
-      emergencyContact: `71${Math.floor(1000000 + Math.random() * 9000000)}`,
+      emergencyContact: `71${randomInt(1000000, 10000000)}`,
       bloodType: getRandomElement(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']),
       isDemo: true, // Flag for easy cleanup
       createdAt: serverTimestamp(),
