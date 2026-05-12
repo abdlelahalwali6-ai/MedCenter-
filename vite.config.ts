@@ -1,84 +1,35 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import { VitePWA, VitePWAOptions } from 'vite-plugin-pwa';
-import path from 'path';
+    import { defineConfig } from 'vite'
+    import react from '@vitejs/plugin-react'
 
-const pwaOptions: Partial<VitePWAOptions> = {
-  registerType: 'autoUpdate',
-  devOptions: {
-    enabled: true,
-  },
-  workbox: {
-    globPatterns: ['**/*.{js,css,html,ico,png,svg,json,vue,txt,woff2}'],
-    runtimeCaching: [
-      {
-        urlPattern: /^https?:\/\/fonts\.googleapis\.com\/.*/i,
-        handler: 'CacheFirst',
-        options: {
-          cacheName: 'google-fonts-cache',
-          expiration: {
-            maxEntries: 10,
-            maxAgeSeconds: 60 * 60 * 24 * 365 // <== 365 days
-          },
-          cacheableResponse: {
-            statuses: [0, 200]
-          }
-        }
-      },
-      {
-        urlPattern: /^https?:\/\/fonts\.gstatic\.com\/.*/i,
-        handler: 'CacheFirst',
-        options: {
-          cacheName: 'gstatic-fonts-cache',
-          expiration: {
-            maxEntries: 10,
-            maxAgeSeconds: 60 * 60 * 24 * 365 // <== 365 days
-          },
-          cacheableResponse: {
-            statuses: [0, 200]
-          }
-        }
-      }
-    ]
-  },
-  includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
-  manifest: {
-    name: 'نظام أمان الطبي',
-    short_name: 'أمان الطبي',
-    description: 'نظام إدارة شامل للمراكز الطبية مع دعم كامل للعمل دون اتصال بالإنترنت',
-    theme_color: '#ffffff',
-    icons: [
-      {
-        src: 'pwa-192x192.png',
-        sizes: '192x192',
-        type: 'image/png',
-      },
-      {
-        src: 'pwa-512x512.png',
-        sizes: '512x512',
-        type: 'image/png',
-      },
-      {
-        src: 'pwa-512x512.png',
-        sizes: '512x512',
-        type: 'image/png',
-        purpose: 'any maskable',
-      },
-    ],
-  },
-};
+    export default defineConfig({
+      plugins: [react()],
+      base: './', // لضمان عمل الروابط بشكل صحيح على GitHub Pages
+    })
+    ```
 
-export default defineConfig({
-  plugins: [
-    react(),
-    VitePWA(pwaOptions)
-  ],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-  },
-  build: {
-    sourcemap: true,
-  },
-});
+### 2. تصحيح ترتيب استيراد الـ CSS
+ذكرت أن هناك ترتيباً خاطئاً لـ `@import` داخل `src/index.css`. في Vite، يجب أن تظهر جميع تصريحات الاستيراد في أعلى الملف.
+*   **الإجراء:** افتح `src/index.css` وانقل أي `@import` (مثل خطوط Google أو Tailwind) لتكون في أول السطور:
+    
+```css
+    /* يجب أن يكون في البداية */
+    @import 'tailwindcss/base';
+    @import 'tailwindcss/components';
+    @import 'tailwindcss/utilities';
+
+    /* باقي التنسيقات تأتي لاحقاً */
+    body { ... }
+    ```
+
+### 3. معالجة المسارات المفقودة (Broken Imports)
+هذه هي النقطة الأهم لنجاح البناء. بما أن النظام يعمل على بيئة Linux (داخل GitHub Actions)، فإن أي اختلاف في حالة الأحرف (مثلاً `App.tsx` مقابل `app.tsx`) سيؤدي لفشل البناء.
+*   **ملف Firebase و Sync Service:** تأكد من وجود هذه الملفات في المسارات المحددة في الكود. إذا كانت المسارات تشير إلى `src/services/firebase.ts` بينما الملف في `src/Firebase.ts`، يجب توحيد التسمية.
+*   **مكونات UI:** راجع ملف `docs/PROJECT_BUILD_BLOCKERS_AR.md` لتحديد المكونات المفقودة بالضبط وقم بتعديل مساراتها لتطابق الهيكل الفعلي للمجلدات.
+
+### 4. تهيئة بيئة الأندرويد (Gradle)
+بما أنك قمت باستبدال `android/app/build.gradle` و `android/keystore.properties.example`:
+*   قم بإنشاء نسخة من الملف الأخير باسم `android/keystore.properties` (بدون كلمة example).
+*   تأكد من أن `build.gradle` يشير إلى متغيرات البيئة التي سنستخدمها في GitHub Actions لكي لا يتوقف البناء عند البحث عن مفاتيح التوقيع المفقودة محلياً.
+
+### الخطوة القادمة (تنفيذ الإصلاح):
+هل يمكنك تزويدي بمحتوى ملف `src/index.css` الحالي أو قائمة بالمسارات التي تعطي خطأ "File not found"؟ سأقوم فوراً بإعطائك الكود المصحح لكل ملف على حدة لتقوم برفعه إلى المستودع.
